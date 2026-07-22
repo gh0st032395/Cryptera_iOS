@@ -277,12 +277,27 @@ scegliere fra rifiutare, rinominare o chiedere conferma: è una decisione di
 prodotto e va presa nella UI di M4/M8, non cambiata di nascosto divergendo dal
 desktop.
 
-#### Debito da saldare in M4
+#### Fixture nel bundle dell'app — risolto (2026-07-22)
 
-⚠️ **Le fixture sono nel bundle dell'app**, non solo in quello di test, perché
-`VerifyView` legge da lì in assenza del picker. **Vanno rimosse** insieme a
-`VerifyView` e alla voce `CrypteraTests/Fixtures` nel target `Cryptera` di
-`project.yml`: i dati di test non devono restare nel bundle di produzione.
+Era annotato come debito da saldare in M4. Ispezionando una build **Release** si
+è confermato che le fixture ci finivano davvero, non solo in Debug.
+
+Sono state **mantenute in Debug ed escluse da Release**
+(`EXCLUDED_SOURCE_FILE_NAMES` in `project.yml`), perché restano genuinamente
+utili: da M4 l'input arriva da `.fileImporter`, che è UI di sistema e fuori
+processo, quindi avere file di prova dentro l'app è il modo più pratico per
+pilotare un UI test. In Release non servono a nulla e non devono esserci.
+
+La verifica non è esprimibile come XCTest — la suite non compila in Release
+perché `@testable import` richiede `ENABLE_TESTABILITY`, che in una build
+distribuibile va lasciata spenta. Vive quindi in
+`scripts/check-release-bundle.sh`, che ispeziona il `.app` prodotto e controlla
+assenza di dati di test, bundle di test e framework di rete (§12.4). Lo script è
+stato verificato in entrambe le direzioni: esce 1 rimuovendo l'esclusione, 0 con
+essa attiva.
+
+**Resta da rimuovere in M4:** `VerifyView` e il suo scaffolding, sostituiti dal
+document picker.
 
 ---
 

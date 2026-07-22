@@ -101,7 +101,18 @@ Da riga di comando:
 ```bash
 xcodebuild test -project Cryptera.xcodeproj -scheme Cryptera \
   -destination 'platform=iOS Simulator,name=iPhone 17'
+
+./scripts/check-release-bundle.sh   # cosa finisce davvero in una build Release
 ```
+
+`check-release-bundle.sh` verifica sul `.app` prodotto che non contenga dati di
+test, bundle di test, né framework di rete (SPEC §12.4). Non è un XCTest perché
+la suite non compila in Release: `@testable import` richiede
+`ENABLE_TESTABILITY`, che in una build distribuibile va lasciata spenta.
+
+> Le fixture dell'upstream sono nel bundle dell'app **solo in Debug**, dove
+> servono a pilotare i UI test — da M4 l'input arriva da `.fileImporter`, che è
+> UI di sistema e fuori processo. In Release sono escluse.
 
 **Tre cose sono artefatti di build e non sono committate** (SPEC §3.1) —
 vanno rigenerate con i comandi qui sopra:

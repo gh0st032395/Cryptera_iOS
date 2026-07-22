@@ -25,9 +25,15 @@ targets:
       - path: Cryptera
         excludes:
           - "**/.gitkeep"
-      # ⚠️ Scaffolding di M3: la schermata Verify legge una fixture dal bundle
-      # perché il document picker arriva in M4. RIMUOVERE con VerifyView —
-      # i dati di test non devono restare nel bundle di produzione.
+      # Fixture dell'upstream disponibili all'app **solo in Debug**.
+      #
+      # Servono ai flussi di test: da M4 l'input arriva da `.fileImporter`, che
+      # è UI di sistema e fuori processo, quindi avere file di prova dentro
+      # l'app resta il modo più pratico per pilotare un UI test.
+      #
+      # In Release non servono a nulla — lì non gira alcun test — e sono dati di
+      # test che non devono raggiungere una build distribuibile. L'esclusione è
+      # nei settings del target qui sotto.
       - path: CrypteraTests/Fixtures
         type: folder
         buildPhase: resources
@@ -40,6 +46,15 @@ targets:
         # che risolve tramite il module.modulemap dentro l'XCFramework.
         SWIFT_INCLUDE_PATHS: $(inherited)
         TARGETED_DEVICE_FAMILY: "1,2"
+      configs:
+        # Le fixture restano fuori dalle build distribuibili.
+        #
+        # La verifica non è esprimibile come XCTest: `@testable import` richiede
+        # ENABLE_TESTABILITY, disattivata in Release, e attivarla lì sarebbe
+        # sbagliato. Il controllo vive quindi in
+        # `scripts/check-release-bundle.sh`, che ispeziona il .app prodotto.
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES: Fixtures
     dependencies:
       # Libreria statica: si linka, non si embedda.
       - framework: Frameworks/CrypteraCore.xcframework
