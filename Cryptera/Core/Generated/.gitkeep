@@ -1,0 +1,3 @@
+# Directory per l'output di uniffi-bindgen (cryptera_ffi.swift).
+# Il contenuto è ignorato da git — vedi .gitignore e SPEC.md §3.1.
+# Questo file esiste solo per preservare la directory nel repo.
