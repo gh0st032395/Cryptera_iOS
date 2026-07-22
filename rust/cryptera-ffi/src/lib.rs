@@ -294,27 +294,34 @@ pub fn decrypt(
             return Ok(meta);
         }
 
-        // `safe_extract_tar` deduce la compressione dal suffisso, quindi il
-        // temporaneo va rinominato col nome reale dell'archivio prima di
-        // estrarlo: senza, un .tar.gz verrebbe letto come tar semplice.
-        let archive_name = if meta.filename.is_empty() {
-            "archive.tar".to_string()
-        } else {
-            meta.filename.clone()
-        };
-        let archive = staging.path().join(&archive_name);
-        move_file(&payload, &archive)?;
+        // La compressione si deduce dal nome memorizzato nell'header, ma il
+        // nome **non diventa mai un percorso**: è dato scelto da chi ha creato
+        // il file, e `Path::join` con un nome assoluto sostituirebbe la base,
+        // scrivendo fuori dalla destinazione. Il payload resta dov'è e la
+        // compressione viaggia come parametro.
+        let comp = orchestration::archive_compression_from_name(&meta.filename);
 
+        // ⚠️ Comportamento noto, allineato all'upstream: l'estrazione **sovrascrive**
+        // i file già presenti nella destinazione, mentre SPEC §6.3 vieta di
+        // sovrascrivere in silenzio. La regola è pensata per l'output di un
+        // singolo file (dove infatti si torna `OutputExists`); per una cartella
+        // servirebbe decidere fra rifiutare, rinominare o chiedere conferma —
+        // ed è una scelta di prodotto, non di implementazione. Va risolta nella
+        // UI di M4/M8, non cambiata qui di nascosto divergendo dal desktop.
         std::fs::create_dir_all(&request.output_path).map_err(|_| CrypteraError::IoError)?;
-        orchestration::safe_extract_tar(
-            &archive.to_string_lossy(),
-            &request.output_path,
-        )?;
+        orchestration::safe_extract_tar(&payload_str, &request.output_path, comp)?;
 
         if request.keep_archive {
-            let kept = Path::new(&request.output_path).join(&archive_name);
+            let name = if meta.filename.is_empty() {
+                "decrypted.tar".to_string()
+            } else {
+                orchestration::safe_archive_basename(&meta.filename)
+            };
+            let kept = Path::new(&request.output_path).join(&name);
+            // L'estrazione può già aver scritto un file con questo nome: in tal
+            // caso l'archivio non lo sovrascrive.
             if !kept.exists() {
-                move_file(&archive, &kept)?;
+                move_file(&payload, &kept)?;
             }
         }
 
@@ -358,6 +365,12 @@ pub fn encrypt(
                 if path.is_empty() {
                     return Err(CrypteraError::InputRequired);
                 }
+                // Su iOS un bookmark scaduto o uno scope non concesso danno un
+                // percorso che non esiste più: senza questo controllo si
+                // otterrebbe un errore molto più avanti e meno leggibile.
+                if !Path::new(path).is_file() {
+                    return Err(CrypteraError::IoError);
+                }
                 // `None` quando il nome non va nascosto: il core lo deriva
                 // dall'input. Passare esplicitamente il nome qui produrrebbe un
                 // header diverso da quello del desktop.
@@ -389,6 +402,13 @@ pub fn encrypt(
                     return Err(CrypteraError::InputRequired);
                 }
                 let folder = Path::new(path);
+                // Senza questo controllo, `walkdir` su una cartella inesistente
+                // produce una singola entry di errore che `skip_special_files`
+                // scarta: il risultato sarebbe un archivio **vuoto** cifrato con
+                // successo, cioè una perdita di dati silenziosa.
+                if !folder.is_dir() {
+                    return Err(CrypteraError::IoError);
+                }
 
                 // Pre-conteggio delle entry, altrimenti la fase di archiviazione
                 // resta a 0% (fix di v2.0.4).
@@ -776,8 +796,243 @@ mod tests {
         assert_eq!(std::fs::read(&out).unwrap(), b"contenuto");
     }
 
+    /// Un `.ecf` ostile non deve poter scrivere fuori dalla destinazione.
+    ///
+    /// Il nome del file è memorizzato **dentro** l'header: chi crea l'archivio
+    /// lo sceglie liberamente, e il core non lo sanifica (valida solo UTF-8 e
+    /// lunghezza). Un nome come `../../../evil.tar` o `/tmp/evil.tar` usato
+    /// come componente di percorso permetterebbe una path traversal — e
+    /// `Path::join` con un percorso assoluto **sostituisce** la base.
+    ///
+    /// Qui il file ostile si costruisce chiamando il core direttamente, perché
+    /// la nostra `encrypt` non espone il nome arbitrario.
     #[test]
-    fn cancellazione_interrompe_l_operazione() {
+    fn nome_ostile_nell_header_non_scrive_fuori_dalla_destinazione() {
+        let dir = tempfile::tempdir().unwrap();
+        let fuori = dir.path().join("FUORI.txt");
+
+        // Un vero TAR, così l'estrazione arriva fino in fondo.
+        let contenuto = dir.path().join("dentro.txt");
+        std::fs::write(&contenuto, b"payload").unwrap();
+        let tar_path = dir.path().join("a.tar");
+        {
+            let f = std::fs::File::create(&tar_path).unwrap();
+            let mut b = tar::Builder::new(f);
+            b.append_path_with_name(&contenuto, "dentro.txt").unwrap();
+            b.finish().unwrap();
+        }
+
+        // Nome ostile **assoluto**: è la variante deterministica, perché
+        // `Path::join` con un percorso assoluto scarta la base e produce
+        // esattamente questo percorso. Con una risalita relativa (`../../x`) la
+        // scrittura finirebbe in un punto dipendente da dove il sistema colloca
+        // le cartelle temporanee, e l'asserzione non proverebbe nulla.
+        let nome_ostile = fuori.to_string_lossy().to_string();
+        let encrypted = dir.path().join("ostile.ecf");
+        crypto_core_rs::encrypt_file_rs_controlled(
+            tar_path.to_str().unwrap(),
+            encrypted.to_str().unwrap(),
+            "p",
+            None,
+            None,
+            false,
+            Some(4),
+            Some(2),
+            None,
+            Some(1),
+            Some(8192),
+            Some(1),
+            Some(&nome_ostile),
+            true, // is_tar_container
+            None,
+            None,
+        )
+        .expect("costruzione del file ostile");
+
+        let out = dir.path().join("estratto");
+        let meta = decrypt(
+            DecryptRequest {
+                input_path: encrypted.to_string_lossy().to_string(),
+                output_path: out.to_string_lossy().to_string(),
+                password: "p".into(),
+                keyfile_path: None,
+                extract_archive: true,
+                keep_archive: true, // il percorso che usa il nome
+            },
+            None,
+            None,
+        )
+        .expect("l'estrazione deve riuscire");
+
+        assert_eq!(meta.filename, nome_ostile, "il nome ostile arriva davvero dall'header");
+        assert!(
+            !fuori.exists(),
+            "path traversal: scritto fuori dalla destinazione in {}",
+            fuori.display()
+        );
+        assert!(out.join("dentro.txt").exists(), "il contenuto legittimo va estratto");
+        // L'archivio conservato deve stare nella destinazione, col nome ridotto
+        // al solo componente finale.
+        assert!(
+            out.join("FUORI.txt").exists(),
+            "keep_archive deve restare dentro out/ col nome sanificato"
+        );
+    }
+
+    #[test]
+    fn basename_sicuro_neutralizza_i_percorsi() {
+        use orchestration::safe_archive_basename as safe;
+        assert_eq!(safe("../../evil.tar"), "evil.tar");
+        assert_eq!(safe("/etc/passwd"), "passwd");
+        assert_eq!(safe("a/b/c.tar.gz"), "c.tar.gz");
+        assert_eq!(safe(".."), "decrypted.tar");
+        assert_eq!(safe(""), "decrypted.tar");
+        assert_eq!(safe("normale.tar"), "normale.tar");
+    }
+
+    #[test]
+    fn compressione_dedotta_dal_nome() {
+        use orchestration::archive_compression_from_name as comp;
+        assert_eq!(comp("x.tar.gz"), ArchiveCompression::Gzip);
+        assert_eq!(comp("x.TGZ"), ArchiveCompression::Gzip);
+        assert_eq!(comp("x.tar.bz2"), ArchiveCompression::Bzip2);
+        assert_eq!(comp("x.tar.xz"), ArchiveCompression::Xz);
+        assert_eq!(comp("x.tar"), ArchiveCompression::None);
+        // Il caso che rompe il desktop: file di lavoro senza estensione.
+        assert_eq!(comp(""), ArchiveCompression::None);
+    }
+
+    /// Dimostra perché la compressione va passata esplicitamente.
+    ///
+    /// Il desktop decifra in un `NamedTempFile` (senza estensione) e passa quel
+    /// percorso a `safe_extract_tar`, che deduce la compressione dal suffisso:
+    /// un archivio gzip finisce quindi nel decoder "tar semplice" e
+    /// l'estrazione fallisce. Questo test blocca quel comportamento da noi.
+    #[test]
+    fn archivio_compresso_si_estrae_anche_senza_estensione_nel_percorso() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("dati");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("f.txt"), b"contenuto").unwrap();
+
+        let flags = ControlFlags::new();
+        let (tmp, nome) = orchestration::create_tar(
+            &src,
+            ArchiveCompression::Gzip,
+            true,
+            &flags,
+            None,
+        )
+        .unwrap();
+        assert!(nome.ends_with(".tar.gz"));
+
+        // Percorso senza estensione, come il temporaneo del desktop.
+        let senza_estensione = dir.path().join("payload");
+        std::fs::copy(tmp.path(), &senza_estensione).unwrap();
+
+        let out = dir.path().join("out");
+        std::fs::create_dir_all(&out).unwrap();
+        orchestration::safe_extract_tar(
+            senza_estensione.to_str().unwrap(),
+            out.to_str().unwrap(),
+            orchestration::archive_compression_from_name(&nome),
+        )
+        .expect("la compressione esplicita rende irrilevante il suffisso del percorso");
+
+        assert_eq!(std::fs::read(out.join("dati/f.txt")).unwrap(), b"contenuto");
+    }
+
+    /// Annullare **durante** l'operazione, che è il caso reale.
+    ///
+    /// La cancellazione parte dal callback di progress, così il momento è
+    /// deterministico e il test non dipende da un timer. Verifica anche che il
+    /// token creato da Swift condivida davvero gli atomici con l'operazione in
+    /// corso: se `flags_of` copiasse invece di clonare l'`Arc`, l'annullamento
+    /// non avrebbe effetto e questo test fallirebbe.
+    #[test]
+    fn cancellazione_durante_l_operazione_non_lascia_output_parziale() {
+        use std::sync::Mutex;
+
+        struct CancellaAlPrimoProgress {
+            token: Mutex<Option<Arc<CancelToken>>>,
+        }
+        impl ProgressListener for CancellaAlPrimoProgress {
+            fn on_progress(&self, _stage: String, _done: u64, _total: u64) {
+                if let Some(t) = self.token.lock().unwrap().take() {
+                    t.cancel();
+                }
+            }
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let plain = dir.path().join("grande.bin");
+        std::fs::write(&plain, vec![7u8; 8 * 1024 * 1024]).unwrap();
+        let out = dir.path().join("out.ecf");
+
+        let token = CancelToken::new();
+        let listener = Arc::new(CancellaAlPrimoProgress {
+            token: Mutex::new(Some(token.clone())),
+        });
+
+        let r = encrypt(
+            EncryptRequest {
+                source: InputSource::File {
+                    path: plain.to_string_lossy().to_string(),
+                },
+                output_path: out.to_string_lossy().to_string(),
+                password: "p".into(),
+                keyfile_path: None,
+                payload_compression: PayloadCompression::None,
+                archive_compression: ArchiveCompression::None,
+                skip_special_files: false,
+                enable_password_check: false,
+                hide_filename: false,
+                security_profile: SecurityProfile::Standard,
+                integrity_profile: IntegrityProfile::Low,
+            },
+            Some(listener),
+            Some(token),
+        );
+
+        assert!(matches!(r, Err(CrypteraError::Cancelled)), "ottenuto {r:?}");
+        // SPEC §11.1: nessun output parziale deve restare sul filesystem, dove
+        // sembrerebbe un file valido. Il core scrive su un temporaneo e rinomina
+        // atomicamente, quindi la garanzia esiste — questo test la blocca.
+        assert!(
+            !out.exists(),
+            "un'operazione annullata non deve lasciare un .ecf parziale"
+        );
+    }
+
+    #[test]
+    fn cartella_inesistente_non_produce_un_archivio_vuoto() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("vuoto.ecf");
+        let r = encrypt(
+            EncryptRequest {
+                source: InputSource::Folder {
+                    path: dir.path().join("non-esiste").to_string_lossy().to_string(),
+                },
+                output_path: out.to_string_lossy().to_string(),
+                password: "p".into(),
+                keyfile_path: None,
+                payload_compression: PayloadCompression::None,
+                archive_compression: ArchiveCompression::None,
+                skip_special_files: true, // scarterebbe l'errore di walkdir
+                enable_password_check: false,
+                hide_filename: false,
+                security_profile: SecurityProfile::Standard,
+                integrity_profile: IntegrityProfile::Low,
+            },
+            None,
+            None,
+        );
+        assert!(matches!(r, Err(CrypteraError::IoError)), "ottenuto {r:?}");
+        assert!(!out.exists(), "non deve restare un archivio vuoto cifrato");
+    }
+
+    #[test]
+    fn cancellazione_prima_dell_avvio_interrompe_subito() {
         let dir = tempfile::tempdir().unwrap();
         let plain = dir.path().join("grande.bin");
         std::fs::write(&plain, vec![7u8; 4 * 1024 * 1024]).unwrap();

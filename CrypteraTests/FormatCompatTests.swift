@@ -174,10 +174,51 @@ final class FormatCompatTests: XCTestCase {
             stages.contains(.encrypting),
             "atteso lo stage 'encrypt' mappato su .encrypting, ottenuti \(stages)"
         )
-        XCTAssertFalse(
-            stages.contains(where: { if case .unknown = $0 { return true } else { return false } }),
-            "nessuno stage deve restare non mappato: \(stages)"
+        assertNessunoStageSconosciuto(stages)
+
+        // Anche decrypt e verify vanno coperti: il core emette stringhe diverse
+        // per ciascuna operazione, e una sola coperta lascerebbe passare un
+        // mismatch sulle altre due.
+        let decBox = StageBox()
+        let restored = try temporaryPath("progress-restored.bin")
+        _ = try await CrypteraEngine.shared.decrypt(
+            DecryptRequest(
+                inputPath: encrypted,
+                outputPath: restored,
+                password: "p",
+                keyfilePath: nil,
+                extractArchive: false,
+                keepArchive: false
+            ),
+            onProgress: { decBox.record($0) }
         )
+        XCTAssertTrue(
+            decBox.stages.contains(.decrypting),
+            "atteso .decrypting, ottenuti \(decBox.stages)"
+        )
+        assertNessunoStageSconosciuto(decBox.stages)
+
+        let verBox = StageBox()
+        _ = try await CrypteraEngine.shared.verify(
+            VerifyRequest(inputPath: encrypted, password: "p", keyfilePath: nil),
+            onProgress: { verBox.record($0) }
+        )
+        XCTAssertTrue(
+            verBox.stages.contains(.verifying),
+            "atteso .verifying, ottenuti \(verBox.stages)"
+        )
+        assertNessunoStageSconosciuto(verBox.stages)
+    }
+
+    /// Uno stage non mappato non è un errore fatale, ma significa che il core ne
+    /// emette uno nuovo e la UI mostrerebbe una fase senza nome.
+    private func assertNessunoStageSconosciuto(
+        _ stages: [OperationStage],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let sconosciuti = stages.filter { if case .unknown = $0 { return true } else { return false } }
+        XCTAssertTrue(sconosciuti.isEmpty, "stage non mappati: \(sconosciuti)", file: file, line: line)
     }
 
     func testCancellazionePrimaDellAvvioProduceCancelled() async throws {

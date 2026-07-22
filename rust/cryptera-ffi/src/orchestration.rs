@@ -178,7 +178,7 @@ pub(crate) fn create_tar(
         ctrl.wait_if_paused().map_err(CrypteraError::from)?;
 
         count += 1;
-        if count % 10 == 0 {
+        if count.is_multiple_of(10) {
             if let Some(cb) = progress.as_deref_mut() {
                 cb(count);
             }
@@ -228,25 +228,62 @@ pub(crate) fn create_tar(
     Ok((tmp, format!("{base_name}{}", comp.suffix())))
 }
 
+/// Deduce la compressione dell'archivio dal nome memorizzato nell'header.
+///
+/// **Solo ispezione di stringa.** Il nome viene da dentro il file cifrato:
+/// è scelto da chi l'ha creato e non deve *mai* diventare un percorso — vedi
+/// `safe_archive_basename`.
+pub(crate) fn archive_compression_from_name(name: &str) -> ArchiveCompression {
+    let lower = name.to_lowercase();
+    if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
+        ArchiveCompression::Gzip
+    } else if lower.ends_with(".tar.bz2") || lower.ends_with(".tbz2") {
+        ArchiveCompression::Bzip2
+    } else if lower.ends_with(".tar.xz") || lower.ends_with(".txz") {
+        ArchiveCompression::Xz
+    } else {
+        ArchiveCompression::None
+    }
+}
+
+/// Riduce il nome memorizzato nell'header a un nome di file innocuo.
+///
+/// `Path::file_name()` scarta ogni componente di directory, quindi
+/// `../../evil` diventa `evil` e `/etc/passwd` diventa `passwd`. Senza questo,
+/// `Path::join` con un nome assoluto **sostituirebbe** la base e scriverebbe
+/// fuori dalla cartella di destinazione.
+pub(crate) fn safe_archive_basename(name: &str) -> String {
+    Path::new(name)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .filter(|n| !n.is_empty() && n != "." && n != "..")
+        .unwrap_or_else(|| "decrypted.tar".to_string())
+}
+
 /// Estrae un TAR, rifiutando i percorsi che uscirebbero dalla cartella di
 /// destinazione.
 ///
 /// La protezione contro lo **Zip Slip** è portata dall'upstream e non va
 /// rimossa: un archivio ostile con `../` scriverebbe altrove nel container.
-pub(crate) fn safe_extract_tar(tar_path: &str, out_dir: &str) -> Result<(), CrypteraError> {
+///
+/// La compressione è un **parametro esplicito**, non dedotta dal suffisso del
+/// percorso come fa l'upstream. Quella deduzione ha due difetti: obbliga a
+/// costruire un percorso a partire da un nome non fidato, e fallisce quando il
+/// file di lavoro non ha estensione — che è esattamente il caso del
+/// `NamedTempFile` usato dal desktop.
+pub(crate) fn safe_extract_tar(
+    tar_path: &str,
+    out_dir: &str,
+    comp: ArchiveCompression,
+) -> Result<(), CrypteraError> {
     let out_dir = Path::new(out_dir).to_path_buf();
     let file = std::fs::File::open(tar_path).map_err(|_| CrypteraError::IoError)?;
 
-    // Il tipo di compressione si deduce dal suffisso, come nell'upstream.
-    let lower = tar_path.to_lowercase();
-    let decoder: Box<dyn std::io::Read> = if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
-        Box::new(flate2::read::GzDecoder::new(file))
-    } else if lower.ends_with(".tar.bz2") || lower.ends_with(".tbz2") {
-        Box::new(bzip2::read::BzDecoder::new(file))
-    } else if lower.ends_with(".tar.xz") || lower.ends_with(".txz") {
-        Box::new(xz2::read::XzDecoder::new(file))
-    } else {
-        Box::new(file)
+    let decoder: Box<dyn std::io::Read> = match comp {
+        ArchiveCompression::Gzip => Box::new(flate2::read::GzDecoder::new(file)),
+        ArchiveCompression::Bzip2 => Box::new(bzip2::read::BzDecoder::new(file)),
+        ArchiveCompression::Xz => Box::new(xz2::read::XzDecoder::new(file)),
+        ArchiveCompression::None => Box::new(file),
     };
 
     let mut archive = tar::Archive::new(decoder);
@@ -262,6 +299,32 @@ pub(crate) fn safe_extract_tar(tar_path: &str, out_dir: &str) -> Result<(), Cryp
         }
         if path.is_absolute() {
             continue;
+        }
+
+        // Il controllo sui `..` sopra guarda il *nome* dell'entry, non dove
+        // punta un link. Un archivio ostile può contenere un symlink verso
+        // l'esterno e poi un file "dentro" quel link: il nome resta relativo e
+        // pulito, ma la scrittura segue il link e finisce fuori. Un link con
+        // target assoluto o con risalite viene quindi rifiutato.
+        //
+        // Gli archivi creati da Cryptera con `skip_special_files` non
+        // contengono link, quindi questo non li tocca.
+        let kind = entry.header().entry_type();
+        if kind.is_symlink() || kind.is_hard_link() {
+            let target = entry
+                .link_name()
+                .map_err(|_| CrypteraError::ExtractError)?
+                .map(|t| t.into_owned());
+            match target {
+                Some(t)
+                    if t.is_absolute()
+                        || t.components()
+                            .any(|c| matches!(c, std::path::Component::ParentDir)) =>
+                {
+                    return Err(CrypteraError::ExtractError);
+                }
+                _ => {}
+            }
         }
 
         let dest = out_dir.join(path.as_ref());
@@ -321,6 +384,68 @@ mod tests {
     fn nome_base_con_fallback_per_la_root() {
         assert_eq!(tar_base_name(Path::new("/home/user/docs")), "docs");
         assert_eq!(tar_base_name(Path::new("/")), "archive");
+    }
+
+    /// Un archivio con un symlink verso l'esterno va rifiutato.
+    ///
+    /// È la variante che il controllo sui `..` nel nome dell'entry non copre:
+    /// il nome del link è pulito, ma il suo *target* punta fuori, e ogni
+    /// scrittura successiva "dentro" quel link uscirebbe dalla destinazione.
+    #[test]
+    fn symlink_con_target_esterno_viene_rifiutato() {
+        for target in ["/etc/passwd", "../../fuori"] {
+            let dir = tempfile::tempdir().unwrap();
+            let tar_path = dir.path().join("ostile.tar");
+            {
+                let f = std::fs::File::create(&tar_path).unwrap();
+                let mut b = tar::Builder::new(f);
+                let mut header = tar::Header::new_gnu();
+                header.set_entry_type(tar::EntryType::Symlink);
+                header.set_size(0);
+                header.set_mode(0o777);
+                b.append_link(&mut header, "link", Path::new(target)).unwrap();
+                b.finish().unwrap();
+            }
+
+            let out = dir.path().join("out");
+            std::fs::create_dir_all(&out).unwrap();
+            let r = safe_extract_tar(
+                tar_path.to_str().unwrap(),
+                out.to_str().unwrap(),
+                ArchiveCompression::None,
+            );
+            assert!(
+                matches!(r, Err(CrypteraError::ExtractError)),
+                "symlink verso {target} doveva essere rifiutato, ottenuto {r:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn symlink_interno_resta_ammesso() {
+        // Un link relativo che resta dentro l'archivio è legittimo e non va
+        // bloccato: rifiutarlo romperebbe archivi validi.
+        let dir = tempfile::tempdir().unwrap();
+        let tar_path = dir.path().join("ok.tar");
+        {
+            let f = std::fs::File::create(&tar_path).unwrap();
+            let mut b = tar::Builder::new(f);
+            let mut header = tar::Header::new_gnu();
+            header.set_entry_type(tar::EntryType::Symlink);
+            header.set_size(0);
+            header.set_mode(0o777);
+            b.append_link(&mut header, "link", Path::new("vicino.txt")).unwrap();
+            b.finish().unwrap();
+        }
+
+        let out = dir.path().join("out");
+        std::fs::create_dir_all(&out).unwrap();
+        safe_extract_tar(
+            tar_path.to_str().unwrap(),
+            out.to_str().unwrap(),
+            ArchiveCompression::None,
+        )
+        .expect("un link relativo interno è legittimo");
     }
 
     #[test]

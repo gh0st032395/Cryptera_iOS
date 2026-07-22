@@ -20,7 +20,7 @@ La specifica di riferimento è in [`SPEC.md`](SPEC.md).
 |---|---|
 | M1 — Spike cross-compilazione | ✅ **verde, senza limitazioni** |
 | M2 — XCFramework | ✅ **app verde su simulatore** |
-| M3 — Primo end-to-end (`verify`) | ✅ **40 test verdi** |
+| M3 — Primo end-to-end (`verify`) | ✅ **48 test verdi, revisionata** |
 | M4 — Decrypt | ⬜ |
 | M5 — Encrypt file | ⬜ |
 | M6 — Encrypt cartella | ⬜ |

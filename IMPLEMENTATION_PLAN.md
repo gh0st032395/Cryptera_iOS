@@ -214,6 +214,69 @@ esposti come funzioni libere, così Rust resta l'unica fonte.
   inosservato. Un test verifica anche che nessun codice grezzo o percorso
   raggiunga la UI (§10.3)
 
+#### Revisione post-M3 (2026-07-22)
+
+Passaggio di ricontrollo su tutto il codice. **Tre difetti trovati e corretti**,
+tutti nel percorso di estrazione, tutti della stessa classe: dati provenienti da
+*dentro* il file cifrato usati come percorso.
+
+**1. Path traversal tramite il nome nell'header (grave).** `meta.filename` è
+scelto da chi crea l'archivio e il core **non lo sanifica** (valida solo UTF-8 e
+lunghezza). Veniva passato a `Path::join` per costruire il file di staging e,
+con `keep_archive`, il percorso di destinazione. In Rust `join` con un percorso
+**assoluto scarta la base**: un `.ecf` con `filename = "/percorso/scelto"`
+faceva scrivere il payload decifrato esattamente lì.
+
+Corretto: il nome non diventa mai un percorso. La compressione si deduce dal
+suffisso con sola ispezione di stringa e viaggia come parametro esplicito; per
+`keep_archive` il nome passa da `safe_archive_basename`, che tiene solo il
+componente finale. Il desktop non ha questo difetto: usa un `NamedTempFile` e
+il letterale `"decrypted.tar"`, mai `meta.filename`.
+
+Il test di regressione costruisce un `.ecf` realmente ostile chiamando il core
+con un `original_filename` assoluto, ed è stato **verificato fallire** sul
+codice vulnerabile — una prima versione del test usava una risalita relativa e
+sarebbe passata comunque, perché la scrittura sarebbe finita in una cartella di
+sistema anziché nel percorso asserito.
+
+**2. Symlink con target esterno (medio).** Il controllo sui `..` guardava il
+*nome* dell'entry, non il target di un link. Un archivio con un symlink verso
+l'esterno, seguito da un file "dentro" quel link, aggirava il controllo: il nome
+resta pulito e la scrittura segue il link. Ora i link con target assoluto o con
+risalite sono rifiutati; quelli relativi interni restano ammessi. **Presente
+anche nell'upstream.**
+
+**3. Cifratura silenziosa di una cartella inesistente (medio).** Con
+`skip_special_files` attivo, `walkdir` su un percorso inesistente produce una
+sola entry di errore che veniva scartata: il risultato era un archivio **vuoto**
+cifrato con successo — una perdita di dati silenziosa. Su iOS è uno scenario
+concreto, perché un bookmark scaduto restituisce un percorso non più valido.
+Ora input file e cartella sono validati prima di iniziare.
+
+#### Altro emerso dalla revisione
+
+- **Il desktop non riesce a estrarre archivi compressi.** Decifra in un
+  `NamedTempFile` (senza estensione) e passa quel percorso a `safe_extract_tar`,
+  che deduce la compressione dal suffisso: un `.tar.gz` finisce nel decoder "tar
+  semplice" e l'estrazione fallisce. Da noi non accade perché la compressione è
+  esplicita; un test blocca il comportamento. **Da segnalare upstream.**
+- **Copertura degli stage estesa** a `decrypt` e `verify`: prima solo `encrypt`
+  era coperto, e un mismatch sulle altre due sarebbe passato inosservato
+- **Cancellazione durante l'operazione** ora testata (prima solo prima
+  dell'avvio), insieme all'assenza di output parziale richiesta da §11.1. Il
+  test verifica anche che il token condiviso con Swift agisca davvero
+  sull'operazione in corso
+- **Clippy pulito**, nessun warning
+
+#### Comportamento noto, non modificato
+
+L'estrazione **sovrascrive** i file già presenti nella destinazione, mentre
+§6.3 vieta di sovrascrivere in silenzio. La regola è pensata per l'output a file
+singolo, dove infatti si torna `OutputExists`. Per una cartella servirebbe
+scegliere fra rifiutare, rinominare o chiedere conferma: è una decisione di
+prodotto e va presa nella UI di M4/M8, non cambiata di nascosto divergendo dal
+desktop.
+
 #### Debito da saldare in M4
 
 ⚠️ **Le fixture sono nel bundle dell'app**, non solo in quello di test, perché
