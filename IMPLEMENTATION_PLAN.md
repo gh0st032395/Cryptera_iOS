@@ -39,14 +39,18 @@ di **v2.0.4**, ignorando tutto il codice tray/updater/window (non esiste su iOS)
 
 | Componente | Stato |
 |---|---|
-| Xcode | ✅ 26.6 (build 17F113) |
+| Xcode | ✅ 26.6 (build 17F113), licenza accettata |
+| SDK iOS / Simulatore | ✅ iOS 26.5 + `iphonesimulator26.5` |
 | Swift | ✅ 6.3.3 |
 | Rust / Cargo | ✅ cargo 1.96.0, rustup 1.29.0 |
-| Target iOS Rust | ❌ **assenti** — solo `aarch64-apple-darwin` |
-| `uniffi-bindgen` | ❌ da installare |
-| XcodeGen / Tuist | ❌ da scegliere e installare |
+| Target iOS Rust | ✅ `aarch64-apple-ios`, `-sim`, `x86_64-apple-ios` |
+| Homebrew | ✅ `/opt/homebrew/bin/brew` |
+| `uniffi-bindgen` | ❌ da installare (M2) |
+| XcodeGen / Tuist | ❌ da scegliere e installare (M2, decisione D2) |
 | `gh` CLI | ❌ assente (git funziona, credenziali nel keychain) |
 | Apple Developer Program | ❓ **da confermare** — blocca M10/M11 |
+
+**Pronto per M2.** Tutto ciò che serviva a M1 è a posto e lo spike è verde.
 
 ---
 
@@ -66,24 +70,45 @@ Da prendere prima o durante M1-M2; ognuna cambia il lavoro a valle.
 
 ## 3. Milestone
 
-### M1 — Spike cross-compilazione ⚠️ bloccante
+### M1 — Spike cross-compilazione ✅ COMPLETATA (2026-07-22)
 
-**È la fase a rischio più alto. Nessuna view SwiftUI prima che sia chiusa.**
+**Esito: completamente positivo, nessuna limitazione funzionale.**
 
-1. `rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios`
-2. Crate di prova che dipende da `crypto_core_rs` via git tag; `cargo build --release --target aarch64-apple-ios`
-3. Isolare l'esito di `xz2` (→ `liblzma`, C via `lzma-sys`) e `bzip2`
+Verificato con Xcode 26.6 (SDK iOS 26.5) e cargo 1.96.0, core a `v2.0.4`:
 
-**Esiti e ramificazioni:**
+| Componente | Device | Simulatore | Evidenza |
+|---|---|---|---|
+| `crypto_core_rs` | ✅ | ✅ arm64 + x86_64 | `otool`: `platform 2` (iOS), arm64 |
+| `xz2` / `liblzma` | ✅ | ✅ | 73 oggetti liblzma, 719 simboli `lzma_*` |
+| `bzip2` / `bzip2-sys` | ✅ | ✅ | 35 simboli `BZ2_*` |
+| `tar`, `flate2`, `walkdir`, `tempfile` | ✅ | ✅ | |
 
-| Esito | Azione |
-|---|---|
-| Tutto compila | Procedere, nessuna limitazione funzionale |
-| `xz2` fallisce | Tentare `CC`/`AR` espliciti verso l'SDK iOS + `IPHONEOS_DEPLOYMENT_TARGET`. Se fallisce ancora: `lzma-rs` **solo per il percorso di decompressione** (compatibilità in lettura di `FLAG_COMPRESS_LZMA` 0x08). **Non rinunciare a LZMA in lettura**: renderebbe indecifrabili su iOS file desktop legittimi |
-| `bzip2` fallisce | Impatto minore — degradare a gzip/xz nella scrittura archivi, nessuna perdita di compatibilità |
+Non è servito alcun intervento: né `CC`/`AR` espliciti né il fallback `lzma-rs`.
+Il crate `cc` risolve i target iOS autonomamente.
 
-**Exit:** il core compila per `aarch64-apple-ios`; esito di `xz2`/`bzip2`
-documentato nella tabella in `README.md`.
+**Conseguenze sul piano:**
+
+1. **La matrice di parità §9 migliora** — LZMA2, archivi gz/xz e archivi bz2
+   passano da ⚠️ a ✅. L'app iOS legge e scrive ogni variante di compressione
+   del formato. Nessuna degradazione da progettare, nessun percorso di sola
+   lettura da isolare.
+2. **Il rischio più alto del progetto è rientrato**, e con esso la ramificazione
+   che avrebbe complicato M5/M6.
+3. ⚠️ **Deployment target** — senza variabile d'ambiente il `minos` eredita la
+   versione dell'SDK (**26.5**), che escluderebbe di fatto quasi tutti i device.
+   `IPHONEOS_DEPLOYMENT_TARGET=17.0` dà correttamente `minos 17.0`: va impostato
+   in `scripts/build-xcframework.sh` per **tutti** i target, non solo il device.
+   È un errore silenzioso — il build riesce comunque — quindi va verificato con
+   `otool -l | grep minos` nello script stesso.
+
+**Scoperta utile per M3** — l'API reale del core: le funzioni hanno suffisso
+`_rs` (`read_metadata_rs`, `encrypt_file_rs`, `decrypt_file_ex_rs`,
+`verify_file_integrity_rs`, `get_keyfile_hash_rs`) e ognuna ha una variante
+`_controlled` che accetta `ControlFlags`. Sono queste le varianti da usare
+nell'FFI. `ControlFlags` espone `cancel: Arc<AtomicBool>`, `pause`,
+`request_cancel()` e `set_pause(bool)` → il `CancelToken` UniFFI mappa
+`cancel()` → `request_cancel()`, `set_paused()` → `set_pause()`,
+`is_cancelled()` → `cancel.load(SeqCst)`.
 
 ---
 
@@ -226,7 +251,8 @@ l'overhead di parità, fino al 300% con profilo `Max`. Fallire subito con
 
 | Rischio | Impatto | Mitigazione |
 |---|---|---|
-| `xz2`/`liblzma` non cross-compila | **Alto** — file desktop LZMA indecifrabili su iOS | M1 anticipata; fallback `lzma-rs` in sola decompressione |
+| ~~`xz2`/`liblzma` non cross-compila~~ | ~~Alto~~ | ✅ **rientrato in M1** — compila senza interventi |
+| Deployment target ereditato dall'SDK (26.5) | Medio — escluderebbe quasi tutti i device, e il build **riesce comunque** | `IPHONEOS_DEPLOYMENT_TARGET=17.0` su tutti i target + verifica `otool -l \| grep minos` nello script |
 | Jetsam su profilo `Paranoid` (512 MiB) | **Alto** — l'app "sparisce" senza eccezione catturabile | Check memoria preventivo, profilo disabilitato sui device che non lo reggono |
 | Security scope chiuso troppo presto | Medio — `IO_ERROR` intermittenti, difficili da diagnosticare | Helper unico `withSecurityScope`, mai duplicato |
 | Divergenza silenziosa di formato | **Critico** — file illeggibili dal desktop | M7 come gate; nessuna primitiva reimplementata in Swift |

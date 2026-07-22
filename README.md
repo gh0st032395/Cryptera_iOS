@@ -10,14 +10,15 @@ Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 
 ## Stato
 
-🚧 **Pre-M1** — repository inizializzato, nessun codice implementato.
+🚧 **M1 completata** — cross-compilazione verificata, nessun codice applicativo
+ancora implementato.
 
 La roadmap completa è in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 La specifica di riferimento è in [`SPEC.md`](SPEC.md).
 
 | Milestone | Stato |
 |---|---|
-| M1 — Spike cross-compilazione | ⬜ non avviata |
+| M1 — Spike cross-compilazione | ✅ **verde, senza limitazioni** |
 | M2 — XCFramework | ⬜ |
 | M3 — Primo end-to-end (`verify`) | ⬜ |
 | M4 — Decrypt | ⬜ |
@@ -42,14 +43,29 @@ dipendenza git con tag pinnato.
 
 ## Esito dello spike di cross-compilazione (SPEC §4.1)
 
-> ⏳ **Non ancora eseguito.** Questa sezione va compilata al completamento di M1,
-> prima di scrivere qualunque view SwiftUI.
+> ✅ **M1 chiusa — esito completamente positivo. Nessuna limitazione funzionale.**
+> Verificato il 2026-07-22 con Xcode 26.6 (SDK iOS 26.5), cargo 1.96.0,
+> `crypto_core_rs` a `v2.0.4`.
 
-| Componente | Target `aarch64-apple-ios` | Note |
-|---|---|---|
-| `crypto_core_rs` | ⬜ da verificare | |
-| `xz2` / `liblzma` (LZMA2) | ⬜ da verificare | Blocca `HDR_FLAG_COMPRESS_LZMA` (0x08) in lettura |
-| `bzip2` | ⬜ da verificare | Solo archivi TAR in scrittura; degradabile |
+| Componente | `aarch64-apple-ios` | Simulatore | Note |
+|---|---|---|---|
+| `crypto_core_rs` | ✅ | ✅ arm64 + x86_64 | Compila pulito, nessun flag speciale |
+| `xz2` / `liblzma` (LZMA2) | ✅ | ✅ | **73 file oggetto liblzma, 719 simboli `lzma_*`** — realmente compilato, non stubbato |
+| `bzip2` / `bzip2-sys` | ✅ | ✅ | 35 simboli `BZ2_*` |
+| `tar`, `flate2`, `walkdir`, `tempfile` | ✅ | ✅ | |
+
+**Nessun intervento richiesto.** Non sono serviti né `CC`/`AR` espliciti verso
+l'SDK iOS né il fallback a `lzma-rs`: il crate `cc` risolve i target iOS da solo.
+Le tre voci ⚠️ della matrice di parità (SPEC §9 — LZMA2, archivi gz/xz, archivi
+bz2) **diventano ✅**: l'app iOS può leggere e scrivere ogni variante di
+compressione del formato.
+
+Artefatto verificato con `otool`: `platform 2` (iOS), architettura arm64.
+
+**Nota sul deployment target.** Senza variabile d'ambiente il `minos` eredita la
+versione dell'SDK (26.5), che escluderebbe ogni device non aggiornatissimo.
+`IPHONEOS_DEPLOYMENT_TARGET=17.0` produce correttamente `minos 17.0` e va
+impostato in `scripts/build-xcframework.sh` per **tutti** i target.
 
 ---
 
