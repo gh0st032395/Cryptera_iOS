@@ -1,0 +1,19 @@
+[package]
+name = "cryptera-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["staticlib", "cdylib", "lib"]
+name = "cryptera_ffi"
+
+# Binario usato da build-xcframework.sh per generare i binding Swift.
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+crypto_core_rs = { git = "https://github.com/gh0st032395/Cryptera", tag = "v2.0.4" }
+uniffi = { version = "0.32", features = ["cli"] }
+thiserror = "2"

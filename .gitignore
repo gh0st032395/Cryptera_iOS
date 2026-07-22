@@ -2,6 +2,10 @@
 .DS_Store
 
 # Xcode
+# Il .xcodeproj è generato da project.yml con XcodeGen (decisione D2):
+# è un artefatto, la fonte di verità è project.yml.
+*.xcodeproj
+*.xcworkspace
 build/
 DerivedData/
 *.xcuserstate

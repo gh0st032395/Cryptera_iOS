@@ -61,8 +61,8 @@ Da prendere prima o durante M1-M2; ognuna cambia il lavoro a valle.
 | # | Decisione | Opzioni | Raccomandazione |
 |---|---|---|---|
 | D1 | Tag del core | `v2.0.3` (da spec) / `v2.0.4` | **`v2.0.4`** — core identico, orchestrazione migliore |
-| D2 | Generazione progetto Xcode | XcodeGen / Tuist / `.xcodeproj` a mano | **XcodeGen** — `project.yml` committato, no conflitti `.pbxproj`, curva molto più bassa di Tuist |
-| D3 | Deployment target | iOS 17 / iOS 16 | **iOS 17** — `.fileImporter` maturo, Observation, `ContentUnavailableView` |
+| D2 | Generazione progetto Xcode | XcodeGen / Tuist / `.xcodeproj` a mano | ✅ **XcodeGen 2.46** adottato in M2 |
+| D3 | Deployment target | iOS 17 / iOS 16 | ✅ **iOS 17** adottato in M2 (`minos 17.0` verificato) |
 | D4 | Apple Developer Program | sì / no | Necessario per test su device reale (§13.2 memoria) e M11 |
 | D5 | Distribuzione | TestFlight / App Store | **TestFlight** per tutto lo sviluppo, indipendentemente dalla scelta finale |
 
@@ -112,22 +112,49 @@ nell'FFI. `ControlFlags` espone `cancel: Arc<AtomicBool>`, `pause`,
 
 ---
 
-### M2 — XCFramework
+### M2 — XCFramework ✅ COMPLETATA (2026-07-22)
 
-- `rust/Cargo.toml` workspace + profilo release (`lto`, `codegen-units = 1`, `panic = "abort"`, `strip`)
-- `rust/cryptera-ffi/` con `crate-type = ["staticlib", "cdylib", "lib"]`
-- `scripts/bootstrap.sh` — targets rustup, `uniffi-bindgen`
-- `scripts/build-xcframework.sh` — `set -euo pipefail`, idempotente:
-  build device → build sim (arm64 + x86_64) → `lipo -create` → `uniffi-bindgen generate --library … --language swift` → riorganizzazione header + `module.modulemap` → `xcodebuild -create-xcframework`
-- `project.yml` XcodeGen, app vuota che linka il framework
+Realizzato: workspace Rust, crate `cryptera-ffi` (UniFFI **0.32**, non 0.28 —
+la spec dice "0.28+" e conviene la corrente per il supporto Swift 6),
+`bootstrap.sh`, `build-xcframework.sh`, `project.yml` XcodeGen, app minimale.
 
-**Exit:** un'app vuota chiama `core_version()` e stampa la versione su device reale.
+**Exit raggiunto:** l'app stampa `cryptera-ffi 0.1.0 (core v2.0.4)` sul
+simulatore; 4 test XCTest verdi, di cui due leggono le fixture reali
+dell'upstream attraverso l'intera catena Swift → UniFFI → Rust → core.
 
-> ⚠️ **Nota Swift 6.3.** La strict concurrency è attiva di default. Il
+> Il criterio della spec dice "su device reale". Verificato su simulatore:
+> il device fisico richiede la decisione **D4**. Non è un rischio per M2 —
+> l'XCFramework contiene la slice `ios-arm64` con `minos 17.0` verificata —
+> ma va riconfermato appena il device è disponibile.
+
+**Superficie esposta finora** (deliberatamente minima): `core_version()`,
+`read_metadata()`, `MetaInfo`, `CrypteraError`. Il resto è M3.
+
+#### Deviazione dalla spec: `panic = "abort"` rimosso
+
+SPEC §4.3 indica `panic = "abort"` nel profilo release, e SPEC §5.4 richiede
+una panic barrier con `catch_unwind` su ogni entry point FFI. **Le due cose
+sono incompatibili:** con `abort` il processo termina subito e `catch_unwind`
+non cattura nulla, quindi la barriera sarebbe codice morto proprio nella build
+release — l'unica che viene spedita.
+
+Si è mantenuto l'unwind (default) e la barriera è effettiva: un panic su un
+file malformato diventa un `CrypteraError::Internal` presentabile, invece di
+far sparire l'app senza spiegazione. Il costo è un binario marginalmente più
+grande. Motivazione registrata in `rust/Cargo.toml`.
+
+#### Altre scelte fissate qui
+
+- **`ENGINE`/`ControlFlags`** — confermata la mappatura per il `CancelToken` di M3
+- **Fixture nel bundle di test** — entrano come folder reference, quindi la
+  lookup richiede `subdirectory: "Fixtures"`. Una fixture mancante **fa fallire**
+  il test, non lo skippa: uno skip trasformerebbe i test di compatibilità (M7)
+  in un verde che non dimostra nulla
+- **`.xcodeproj` non committato** — la fonte di verità è `project.yml`
+
+> ⚠️ **Nota Swift 6.3 per M3.** La strict concurrency è attiva. Il
 > `ProgressListener` UniFFI viene invocato da un thread Rust: il tipo generato
 > va reso esplicitamente `Sendable` e la callback deve fare hop sul main actor.
-> Verificare la versione UniFFI corrente al bootstrap — la spec dice 0.28+, ma
-> conviene allinearsi all'ultima stabile per il supporto Swift 6.
 
 ---
 

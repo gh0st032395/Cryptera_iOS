@@ -10,8 +10,8 @@ Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 
 ## Stato
 
-🚧 **M1 completata** — cross-compilazione verificata, nessun codice applicativo
-ancora implementato.
+🚧 **M2 completata** — l'XCFramework è linkabile e l'app gira. La superficie
+crittografica (encrypt / decrypt / verify) arriva in M3.
 
 La roadmap completa è in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 La specifica di riferimento è in [`SPEC.md`](SPEC.md).
@@ -19,7 +19,7 @@ La specifica di riferimento è in [`SPEC.md`](SPEC.md).
 | Milestone | Stato |
 |---|---|
 | M1 — Spike cross-compilazione | ✅ **verde, senza limitazioni** |
-| M2 — XCFramework | ⬜ |
+| M2 — XCFramework | ✅ **app verde su simulatore** |
 | M3 — Primo end-to-end (`verify`) | ⬜ |
 | M4 — Decrypt | ⬜ |
 | M5 — Encrypt file | ⬜ |
@@ -90,12 +90,33 @@ il progress di archiviazione (assente in 2.0.3).
 ## Build
 
 ```bash
-./scripts/bootstrap.sh          # rustup targets + uniffi-bindgen
+./scripts/bootstrap.sh          # verifica toolchain + target rustup
 ./scripts/build-xcframework.sh  # → Frameworks/CrypteraCore.xcframework
+xcodegen generate               # → Cryptera.xcodeproj
+open Cryptera.xcodeproj
 ```
 
-`Frameworks/*.xcframework` e `Cryptera/Core/Generated/` sono artefatti di build:
-**non sono committati**, vanno rigenerati. Vedi SPEC §3.1.
+Da riga di comando:
+
+```bash
+xcodebuild test -project Cryptera.xcodeproj -scheme Cryptera \
+  -destination 'platform=iOS Simulator,name=iPhone 17'
+```
+
+**Tre cose sono artefatti di build e non sono committate** (SPEC §3.1) —
+vanno rigenerate con i comandi qui sopra:
+
+| Artefatto | Generato da |
+|---|---|
+| `Frameworks/CrypteraCore.xcframework` | `build-xcframework.sh` |
+| `Cryptera/Core/Generated/cryptera_ffi.swift` | `build-xcframework.sh` (uniffi-bindgen) |
+| `Cryptera.xcodeproj` | `xcodegen generate` da `project.yml` |
+
+La fonte di verità del progetto Xcode è [`project.yml`](project.yml): il
+`.pbxproj` produce conflitti di merge illeggibili, quindi non entra nel repo.
+Aggiungendo un file al progetto va rieseguito `xcodegen generate`.
+
+Toolchain richiesta: Xcode con SDK iOS, Rust, e `brew install xcodegen`.
 
 ---
 

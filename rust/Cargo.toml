@@ -1,0 +1,23 @@
+[workspace]
+members = ["cryptera-ffi"]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = "symbols"
+
+# NOTA — deviazione consapevole da SPEC §4.3, che indica `panic = "abort"`.
+#
+# `panic = "abort"` e la panic barrier di SPEC §5.4 sono mutuamente
+# incompatibili: con `abort` il processo termina immediatamente e
+# `std::panic::catch_unwind` non cattura nulla, quindi la barriera
+# diventerebbe codice morto proprio nella build release — l'unica che
+# viene spedita.
+#
+# Per un'app di cifratura la differenza è concreta: un panic su un file
+# malformato con `abort` fa sparire l'app senza spiegazione, mentre con
+# `unwind` + catch_unwind diventa un CrypteraError::Internal presentabile
+# all'utente. Si mantiene quindi l'unwind (default) e la barriera resta
+# effettiva. Vedi errors.rs::guard.
