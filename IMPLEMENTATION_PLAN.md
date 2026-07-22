@@ -158,7 +158,72 @@ grande. Motivazione registrata in `rust/Cargo.toml`.
 
 ---
 
-### M3 — Superficie FFI + primo end-to-end
+### M3 — Superficie FFI + primo end-to-end ✅ COMPLETATA (2026-07-22)
+
+**Exit raggiunto:** `verify` funzionante dalla schermata minimale, con progress
+e cancellazione. **40 test verdi** — 27 Rust nel crate FFI, 11 XCTest, 2 UI test
+che guidano davvero la schermata.
+
+Realizzato: superficie UniFFI completa (`encrypt` / `decrypt` / `verify` /
+`read_metadata`, `ProgressListener`, `CancelToken`), orchestrazione portata da
+`main.rs` v2.0.4 (TAR con protezione Zip Slip, profili, pre-conteggio entry),
+`CrypteraEngine`, `ErrorPresenter`, `VerifyView`, e `FormatCompatTests` — che
+copre già i punti 1 e 2 di SPEC §13.1.
+
+#### Tre scoperte con conseguenze
+
+**1. Su header v5 una password errata dà `HEADER_AUTH_FAILED`, non
+`PASSWORD_INVALID`.** Il tag di autenticazione dell'header deriva dalla master
+key, quindi una password sbagliata lo invalida, e quel controllo precede il
+record PWCHK. Su v4 (fixture upstream) si ottiene invece `PASSWORD_INVALID`,
+perché il PWCHK risponde prima.
+
+Il desktop mappa `HEADER_AUTH_FAILED` su *"Il file potrebbe essere stato
+manomesso"* — un messaggio allarmante e quasi sempre falso, dato che la causa
+normale è un refuso. **È un bug di UX ereditabile:** portare le stringhe
+dell'upstream senza pensarci lo replicherebbe. `ErrorPresenter` usa un messaggio
+che copre onestamente entrambe le cause. Il codice **non** va rimappato su
+`PasswordInvalid`: nasconderebbe le manomissioni vere.
+
+**2. L'header è ridondante: corromperne una copia non è un errore.** Il formato
+scrive una seconda copia dell'Header Body nel trailer `ECCT` (§16.1) e il core
+la usa quando la prima non passa il CRC. Quindi SPEC §13.1 punto 5 — *"modificare
+un byte dell'header e attendersi HEADER_AUTH_FAILED"* — preso alla lettera è
+impreciso: con una sola copia corrotta il risultato **corretto** è il recupero.
+Per far fallire davvero l'autenticazione va manomesso il tag in entrambe le
+copie (il tag non è coperto dal CRC). Entrambi i comportamenti sono ora testati.
+
+**3. UniFFI non esporta i metodi degli enum.** `memory_bytes()` e
+`parity_overhead_percent()` erano invisibili a Swift; riscriverli in Swift
+avrebbe fatto divergere i valori di §5.2 da quelli scritti nell'header. Sono
+esposti come funzioni libere, così Rust resta l'unica fonte.
+
+#### Scelte di implementazione
+
+- **Throttling del progress in Rust, non in Swift.** SPEC §7 lo colloca in
+  Swift; farlo nel crate FFI è strettamente migliore perché ogni notifica è un
+  attraversamento del confine. La notifica finale (`done == total`) e i cambi
+  di stage passano sempre, altrimenti la barra resta ferma sotto il 100%
+- **Coda dedicata, non il pool cooperativo.** Le chiamate UniFFI sono bloccanti:
+  girano su una `DispatchQueue` con QoS `.userInitiated`. Bloccare il pool di
+  Swift Concurrency rischierebbe di affamarlo
+- **I binding sono nel modulo dell'app**, quindi i metodi dell'engine ne
+  oscurano i nomi: le chiamate vanno qualificate `Cryptera.verify(...)`
+- **Aggiunto un target UI test.** Gli XCTest esercitano il motore, non la
+  schermata: un errore di cablaggio fra vista e motore sarebbe passato
+  inosservato. Un test verifica anche che nessun codice grezzo o percorso
+  raggiunga la UI (§10.3)
+
+#### Debito da saldare in M4
+
+⚠️ **Le fixture sono nel bundle dell'app**, non solo in quello di test, perché
+`VerifyView` legge da lì in assenza del picker. **Vanno rimosse** insieme a
+`VerifyView` e alla voce `CrypteraTests/Fixtures` nel target `Cryptera` di
+`project.yml`: i dati di test non devono restare nel bundle di produzione.
+
+---
+
+### M3 — dettaglio originale del piano
 
 **Crate `cryptera-ffi`** (§5.1-5.4), portando l'orchestrazione da `main.rs` v2.0.4:
 
@@ -184,6 +249,7 @@ l'operazione ideale per il primo end-to-end perché non scrive output.
 
 ### M4 — Decrypt
 
+- **Pulizia del debito di M3** (vedi sopra): rimuovere `VerifyView`, le fixture dal bundle dell'app e la relativa voce in `project.yml`
 - `FileAccess.swift`: helper `withSecurityScope` **unico e non duplicato** (§6.1). Lo scope va tenuto aperto per **tutta** la durata dell'operazione: chiuderlo prima produce `IO_ERROR` intermittenti su file grandi — è l'errore classico
 - `CrypteraEngine` actor: chiamate UniFFI su task `.userInitiated`, **mai sul main actor** (sono sincrone e bloccanti)
 - Progress con **throttling ~10 update/s** — senza, un file grande blocca la UI

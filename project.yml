@@ -25,6 +25,12 @@ targets:
       - path: Cryptera
         excludes:
           - "**/.gitkeep"
+      # ⚠️ Scaffolding di M3: la schermata Verify legge una fixture dal bundle
+      # perché il document picker arriva in M4. RIMUOVERE con VerifyView —
+      # i dati di test non devono restare nel bundle di produzione.
+      - path: CrypteraTests/Fixtures
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cryptera.ios
@@ -38,6 +44,18 @@ targets:
       # Libreria statica: si linka, non si embedda.
       - framework: Frameworks/CrypteraCore.xcframework
         embed: false
+
+  CrypteraUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: CrypteraUITests
+    dependencies:
+      - target: Cryptera
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cryptera.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
 
   CrypteraTests:
     type: bundle.unit-test

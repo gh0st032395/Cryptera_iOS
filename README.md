@@ -10,8 +10,8 @@ Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 
 ## Stato
 
-🚧 **M2 completata** — l'XCFramework è linkabile e l'app gira. La superficie
-crittografica (encrypt / decrypt / verify) arriva in M3.
+🚧 **M3 completata** — superficie crittografica completa, `verify` funzionante
+dalla UI. Il document picker e l'apertura dei `.ecf` arrivano in M4.
 
 La roadmap completa è in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 La specifica di riferimento è in [`SPEC.md`](SPEC.md).
@@ -20,7 +20,7 @@ La specifica di riferimento è in [`SPEC.md`](SPEC.md).
 |---|---|
 | M1 — Spike cross-compilazione | ✅ **verde, senza limitazioni** |
 | M2 — XCFramework | ✅ **app verde su simulatore** |
-| M3 — Primo end-to-end (`verify`) | ⬜ |
+| M3 — Primo end-to-end (`verify`) | ✅ **40 test verdi** |
 | M4 — Decrypt | ⬜ |
 | M5 — Encrypt file | ⬜ |
 | M6 — Encrypt cartella | ⬜ |

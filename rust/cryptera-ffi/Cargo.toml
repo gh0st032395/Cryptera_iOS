@@ -17,3 +17,13 @@ path = "src/bin/uniffi-bindgen.rs"
 crypto_core_rs = { git = "https://github.com/gh0st032395/Cryptera", tag = "v2.0.4" }
 uniffi = { version = "0.32", features = ["cli"] }
 thiserror = "2"
+
+# Orchestrazione portata da src-tauri/src/main.rs (SPEC §2.2 regola 2).
+tar = "0.4"
+flate2 = "1.0"
+xz2 = "0.1"
+bzip2 = "0.4"
+walkdir = "2.5"
+tempfile = "3.10"
+rayon = "1.10"
+zeroize = "1.8"
