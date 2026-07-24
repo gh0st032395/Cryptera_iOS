@@ -30,8 +30,20 @@ use zeroize::Zeroizing;
 /// cargo non espone la revisione di una dipendenza git al codice.
 const CORE_TAG: &str = "v2.0.4";
 
-/// `FLAG_TAR_CONTAINER` (SPEC §16.3): il payload cifrato è un archivio TAR.
+// ─── Flag dell'header (SPEC §16.3) ─────────────────────────────────
+//
+// Restano confinati qui: Swift li legge attraverso `describe_header`, mai
+// riscrivendo le maschere. Una maschera duplicata che diverge non produce un
+// errore di compilazione — produce una schermata che descrive il file in modo
+// sbagliato.
+
+const FLAG_PWCHK: u8 = 0x01;
+const FLAG_COMPRESS_ZLIB: u8 = 0x02;
+const FLAG_COMPRESS_LZMA: u8 = 0x08;
+/// Il payload cifrato è un archivio TAR.
 const FLAG_TAR_CONTAINER: u8 = 0x20;
+/// Nome del file cifrato dentro l'header (solo v5).
+const FLAG_ENC_FILENAME: u8 = 0x40;
 
 // ─── Tipi di input (SPEC §5.1) ─────────────────────────────────────
 
@@ -119,6 +131,60 @@ impl MetaInfo {
     pub fn is_tar_container(&self) -> bool {
         self.flags & FLAG_TAR_CONTAINER != 0
     }
+}
+
+/// Lettura dei flag dell'header in forma utilizzabile dalla UI.
+///
+/// La schermata Decrypt mostra all'utente cosa contiene il file **prima** di
+/// chiedere la password (SPEC §8.3), e per farlo deve interpretare `flags`.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HeaderSummary {
+    /// Il payload è un archivio TAR: la UI può offrire "estrai".
+    pub is_tar_container: bool,
+    pub payload_compression: PayloadCompression,
+    /// È presente il record PWCHK.
+    pub has_password_check: bool,
+    /// Il nome originale è cifrato (v5): `MetaInfo::filename` resta vuoto
+    /// finché non si fornisce la password. Non è un errore.
+    pub filename_encrypted: bool,
+}
+
+/// Interpreta i flag di un header già letto.
+///
+/// Esiste come funzione libera perché **UniFFI non esporta i metodi dei
+/// record**: senza, Swift dovrebbe riscrivere le maschere di SPEC §16.3, e una
+/// divergenza fra le due copie sarebbe silenziosa.
+#[uniffi::export]
+pub fn describe_header(meta: MetaInfo) -> HeaderSummary {
+    HeaderSummary {
+        is_tar_container: meta.is_tar_container(),
+        // ZLIB e LZMA sono mutuamente esclusivi nel formato; se un file ostile
+        // li presenta entrambi si sceglie comunque un valore solo, invece di
+        // esporre l'ambiguità alla UI.
+        payload_compression: if meta.flags & FLAG_COMPRESS_LZMA != 0 {
+            PayloadCompression::Lzma
+        } else if meta.flags & FLAG_COMPRESS_ZLIB != 0 {
+            PayloadCompression::Zlib
+        } else {
+            PayloadCompression::None
+        },
+        has_password_check: meta.flags & FLAG_PWCHK != 0,
+        filename_encrypted: meta.flags & FLAG_ENC_FILENAME != 0,
+    }
+}
+
+/// Riduce il nome memorizzato nell'header a un nome di file innocuo.
+///
+/// Il nome è scelto da chi ha creato il `.ecf` e **il core non lo sanifica**
+/// (valida solo UTF-8 e lunghezza). Swift lo usa per nominare il file decifrato
+/// nella cartella di lavoro, e `URL.appendingPathComponent` non neutralizza né
+/// le risalite né i percorsi assoluti: `../../x` uscirebbe dalla cartella.
+///
+/// La sanificazione è la stessa usata da `keep_archive` in `decrypt`: una sola
+/// implementazione, in un solo punto.
+#[uniffi::export]
+pub fn safe_output_name(stored_name: String, fallback: String) -> String {
+    orchestration::safe_basename(&stored_name, &fallback)
 }
 
 // ─── Configurazione ────────────────────────────────────────────────
@@ -877,6 +943,82 @@ mod tests {
             out.join("FUORI.txt").exists(),
             "keep_archive deve restare dentro out/ col nome sanificato"
         );
+    }
+
+    /// I flag devono essere letti da Rust, non riscritti in Swift.
+    ///
+    /// Il caso `v4-zlib-hidden` è utile perché combina compressione e nome
+    /// nascosto: se le maschere fossero scambiate, il test lo mostrerebbe.
+    #[test]
+    fn describe_header_legge_i_flag_delle_fixture() {
+        let basic = describe_header(read_metadata(fixture("v4-basic.ecf")).unwrap());
+        assert!(!basic.is_tar_container);
+        assert_eq!(basic.payload_compression, PayloadCompression::None);
+
+        let zlib = describe_header(read_metadata(fixture("v4-zlib-hidden.ecf")).unwrap());
+        assert_eq!(zlib.payload_compression, PayloadCompression::Zlib);
+        assert!(!zlib.is_tar_container);
+    }
+
+    #[test]
+    fn describe_header_riconosce_il_container_tar() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("cartella");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("f.txt"), b"x").unwrap();
+
+        let cifra = |out: &Path, hide: bool| {
+            encrypt(
+                EncryptRequest {
+                    source: InputSource::Folder {
+                        path: src.to_string_lossy().to_string(),
+                    },
+                    output_path: out.to_string_lossy().to_string(),
+                    password: "p".into(),
+                    keyfile_path: None,
+                    payload_compression: PayloadCompression::None,
+                    archive_compression: ArchiveCompression::None,
+                    skip_special_files: true,
+                    enable_password_check: true,
+                    hide_filename: hide,
+                    security_profile: SecurityProfile::Standard,
+                    integrity_profile: IntegrityProfile::Low,
+                },
+                None,
+                None,
+            )
+            .unwrap()
+        };
+
+        let normale = describe_header(cifra(&dir.path().join("normale.ecf"), false));
+        assert!(normale.is_tar_container, "la UI deve poter offrire l'estrazione");
+        assert!(normale.has_password_check);
+        assert!(
+            normale.filename_encrypted,
+            "su v5 il nome originale viaggia cifrato nell'header"
+        );
+
+        // Nascondere il nome non significa cifrarlo: significa non memorizzarne
+        // alcuno, quindi il flag resta spento. La distinzione conta per la UI —
+        // `filename` vuoto con il flag acceso vuol dire "serve la password",
+        // senza flag vuol dire "questo file non ha un nome da mostrare".
+        let nascosto = describe_header(cifra(&dir.path().join("nascosto.ecf"), true));
+        assert!(nascosto.is_tar_container);
+        assert!(
+            !nascosto.filename_encrypted,
+            "con il nome nascosto non c'è nulla da cifrare"
+        );
+    }
+
+    /// Swift usa il nome dell'header per nominare il file decifrato: la
+    /// sanificazione deve essere quella di Rust, non una seconda copia.
+    #[test]
+    fn safe_output_name_neutralizza_i_nomi_ostili() {
+        assert_eq!(safe_output_name("../../evil.txt".into(), "out.bin".into()), "evil.txt");
+        assert_eq!(safe_output_name("/etc/passwd".into(), "out.bin".into()), "passwd");
+        assert_eq!(safe_output_name("".into(), "out.bin".into()), "out.bin");
+        assert_eq!(safe_output_name("..".into(), "out.bin".into()), "out.bin");
+        assert_eq!(safe_output_name("normale.pdf".into(), "out.bin".into()), "normale.pdf");
     }
 
     #[test]

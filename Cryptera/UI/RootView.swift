@@ -1,0 +1,91 @@
+import SwiftUI
+
+/// File `.ecf` consegnato all'app dall'esterno.
+///
+/// Ha un'identità propria perché la stessa apertura dello stesso file deve
+/// contare come un evento nuovo: confrontando i soli URL, riaprire due volte lo
+/// stesso documento non farebbe scattare nulla.
+struct PendingInput: Equatable, Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// Instradamento fra le schermate.
+///
+/// Esiste per un motivo solo: un `.ecf` aperto dall'app File deve arrivare
+/// nella schermata Decrypt già compilato (SPEC §6.5), che è il gesto
+/// equivalente al doppio click sul desktop.
+@MainActor
+@Observable
+final class AppRouter {
+    enum Tab: Hashable {
+        case decrypt
+        case verify
+    }
+
+    var tab: Tab = .decrypt
+    private(set) var pendingInput: PendingInput?
+
+    func open(_ url: URL) {
+        pendingInput = PendingInput(url: url)
+        tab = .decrypt
+    }
+}
+
+/// Contenitore delle schermate.
+///
+/// La struttura definitiva di SPEC §8.1 — cinque tab su iPhone,
+/// `NavigationSplitView` su iPad — arriva con il design system in M9. Qui ci
+/// sono le due schermate che esistono.
+struct RootView: View {
+    @State private var router = AppRouter()
+
+    var body: some View {
+        TabView(selection: $router.tab) {
+            DecryptView(router: router)
+                .tabItem { Label("Decifra", systemImage: "lock.open") }
+                .tag(AppRouter.Tab.decrypt)
+
+            VerifyView()
+                .tabItem { Label("Verifica", systemImage: "checkmark.shield") }
+                .tag(AppRouter.Tab.verify)
+        }
+        .onOpenURL { router.open($0) }
+        .task {
+            // Prima di qualunque operazione: un output decifrato di una sessione
+            // interrotta non deve sopravvivere al riavvio dell'app.
+            TemporaryWorkspace.purgeStale()
+            await CrypteraEngine.shared.configureIfNeeded()
+            #if DEBUG
+            if let url = LaunchArguments.fixtureToOpen() { router.open(url) }
+            #endif
+        }
+    }
+}
+
+#if DEBUG
+/// Aggancio per i UI test.
+///
+/// Da M4 l'input arriva da `.fileImporter`, che è interfaccia di sistema fuori
+/// processo: XCUITest non la pilota in modo affidabile fra versioni di iOS.
+/// Questo argomento inietta una fixture del bundle **attraverso lo stesso
+/// percorso di `.onOpenURL`** — che è anche il flusso da verificare, l'apertura
+/// di un `.ecf` arrivato da fuori.
+///
+/// È il motivo per cui le fixture restano nel bundle in Debug; in Release sono
+/// escluse da `project.yml` e questo codice non viene nemmeno compilato.
+enum LaunchArguments {
+    static let openFixture = "-apri-fixture"
+
+    static func fixtureToOpen() -> URL? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: openFixture),
+              index + 1 < arguments.count else { return nil }
+        return Bundle.main.url(
+            forResource: arguments[index + 1],
+            withExtension: "ecf",
+            subdirectory: "Fixtures"
+        )
+    }
+}
+#endif

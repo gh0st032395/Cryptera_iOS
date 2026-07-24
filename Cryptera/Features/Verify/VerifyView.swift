@@ -1,48 +1,55 @@
 import SwiftUI
 
-/// Schermata di verifica minimale — criterio di uscita di M3 (SPEC §15).
+/// Schermata Verify (SPEC §8.3): controlla l'integrità senza scrivere nulla.
 ///
-/// **Nessun design**: la UI reale arriva in M9. Serve a dimostrare che
-/// l'intera catena SwiftUI → CrypteraEngine → UniFFI → Rust → core funziona
-/// end-to-end, con progress e cancellazione.
-///
-/// L'input è una fixture nel bundle perché il document picker arriva in M4.
+/// Prima di M4 leggeva una fixture del bundle, perché il document picker non
+/// esisteva ancora. Ora l'input arriva dallo stesso `.fileImporter` di Decrypt,
+/// e lo scaffolding di M3 — `BundledFixture` e il picker delle fixture — è
+/// stato rimosso.
 struct VerifyView: View {
     @State private var model = VerifyModel()
+    @State private var choosingInput = false
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("File") {
-                    Picker("Fixture", selection: $model.fixture) {
-                        ForEach(BundledFixture.allCases) { fixture in
-                            Text(fixture.displayName).tag(fixture)
-                        }
+                Section("File cifrato") {
+                    Button("Scegli un file .ecf") { choosingInput = true }
+                        .accessibilityIdentifier("verify.chooseInput")
+
+                    if let input = model.input {
+                        LabeledContent("File", value: input.lastPathComponent)
+                            .accessibilityIdentifier("verify.input")
                     }
-                    SecureField("Password", text: $model.password)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .accessibilityIdentifier("verify.password")
                 }
 
-                Section {
-                    if model.isRunning {
-                        HStack {
-                            if let fraction = model.progress?.fraction {
-                                ProgressView(value: fraction)
-                            } else {
-                                ProgressView()
+                if model.input != nil {
+                    Section("Password") {
+                        SecureField("Password", text: $model.password)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("verify.password")
+                    }
+
+                    Section {
+                        if model.isRunning {
+                            HStack {
+                                if let fraction = model.progress?.fraction {
+                                    ProgressView(value: fraction) {
+                                        Text(model.progress?.stage.displayName ?? "")
+                                    }
+                                } else {
+                                    ProgressView { Text(model.progress?.stage.displayName ?? "") }
+                                }
+                                Spacer()
+                                Button("Annulla", role: .destructive) { model.cancel() }
+                                    .buttonStyle(.borderless)
                             }
-                            Spacer()
-                            Button("Annulla", role: .destructive) { model.cancel() }
-                                .buttonStyle(.borderless)
+                        } else {
+                            Button("Verifica") { Task { await model.run() } }
+                                .disabled(!model.canRun)
+                                .accessibilityIdentifier("verify.run")
                         }
-                    } else {
-                        Button("Verifica") {
-                            Task { await model.run() }
-                        }
-                        .disabled(model.password.isEmpty)
-                        .accessibilityIdentifier("verify.run")
                     }
                 }
 
@@ -52,10 +59,9 @@ struct VerifyView: View {
                         case .success(let meta):
                             LabeledContent("Esito", value: "integro")
                                 .accessibilityIdentifier("verify.outcome.success")
-                            LabeledContent("Versione", value: "\(meta.version)")
-                            LabeledContent("Nome", value: meta.filename.isEmpty ? "—" : meta.filename)
-                            LabeledContent("k / r", value: "\(meta.k) / \(meta.r)")
-                            LabeledContent("Dimensione", value: "\(meta.plainSize) B")
+                            LabeledContent("Formato", value: "ECF1 v\(meta.version)")
+                            LabeledContent("Dimensione", value: SizeFormatter.string(meta.plainSize))
+                            LabeledContent("Ridondanza", value: "k \(meta.k) / r \(meta.r)")
                         case .failure(let message):
                             Text(message)
                                 .foregroundStyle(.red)
@@ -63,36 +69,19 @@ struct VerifyView: View {
                         }
                     }
                 }
-
-                Section("Core") {
-                    Text(model.version).font(.footnote.monospaced())
-                }
             }
-            .navigationTitle("Verify")
+            .navigationTitle("Verifica")
         }
-        .task { await model.load() }
+        .fileImporter(
+            isPresented: $choosingInput,
+            allowedContentTypes: [.crypteraECF]
+        ) { result in
+            if case .success(let url) = result { model.select(url) }
+        }
     }
 }
 
 // MARK: - Model
-
-/// Fixture dell'upstream incluse nel bundle.
-///
-/// ⚠️ **Scaffolding di M3, da rimuovere in M4** insieme a questa schermata:
-/// i dati di test non devono restare nel bundle di produzione. In M4 l'input
-/// arriva da `.fileImporter` e le fixture restano solo nel target di test,
-/// dove già sono.
-enum BundledFixture: String, CaseIterable, Identifiable {
-    case v4Basic = "v4-basic"
-    case v4ZlibHidden = "v4-zlib-hidden"
-
-    var id: String { rawValue }
-    var displayName: String { rawValue }
-
-    var path: String? {
-        Bundle.main.path(forResource: rawValue, ofType: "ecf", inDirectory: "Fixtures")
-    }
-}
 
 @MainActor
 @Observable
@@ -102,17 +91,21 @@ final class VerifyModel {
         case failure(String)
     }
 
-    var fixture: BundledFixture = .v4Basic
+    private(set) var input: URL?
     var password = ""
-    var progress: OperationProgress?
-    var outcome: Outcome?
-    var isRunning = false
-    var version = "…"
+    private(set) var progress: OperationProgress?
+    private(set) var outcome: Outcome?
+    private(set) var isRunning = false
 
     private var token: CancelToken?
 
-    func load() async {
-        version = await CrypteraEngine.shared.version()
+    var canRun: Bool { input != nil && !password.isEmpty && !isRunning }
+
+    func select(_ url: URL) {
+        input = url
+        outcome = nil
+        progress = nil
+        password = ""
     }
 
     func cancel() {
@@ -120,31 +113,32 @@ final class VerifyModel {
     }
 
     func run() async {
-        guard let path = fixture.path else {
-            outcome = .failure("Fixture non presente nel bundle.")
-            return
-        }
+        guard let input else { return }
 
+        let token = CancelToken()
+        self.token = token
         isRunning = true
         outcome = nil
         progress = nil
-        let token = CancelToken()
-        self.token = token
         defer {
             isRunning = false
             self.token = nil
         }
 
+        let password = password
+
         do {
-            let meta = try await CrypteraEngine.shared.verify(
-                VerifyRequest(inputPath: path, password: password, keyfilePath: nil),
-                token: token,
-                onProgress: { [weak self] update in
-                    // Il callback arriva da un thread Rust: hop sul main actor
-                    // prima di toccare stato osservabile (SPEC §7).
-                    Task { @MainActor in self?.progress = update }
-                }
-            )
+            let meta = try await FileAccess.withSecurityScope(input) { path in
+                try await CrypteraEngine.shared.verify(
+                    VerifyRequest(inputPath: path, password: password, keyfilePath: nil),
+                    token: token,
+                    onProgress: { [weak self] update in
+                        // Il callback arriva da un thread Rust: hop sul main
+                        // actor prima di toccare stato osservabile (SPEC §7).
+                        Task { @MainActor in self?.progress = update }
+                    }
+                )
+            }
             outcome = .success(meta)
         } catch let error as CrypteraError {
             outcome = .failure(ErrorPresenter.message(for: error))

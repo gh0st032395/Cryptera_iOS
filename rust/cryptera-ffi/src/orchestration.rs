@@ -253,11 +253,22 @@ pub(crate) fn archive_compression_from_name(name: &str) -> ArchiveCompression {
 /// `Path::join` con un nome assoluto **sostituirebbe** la base e scriverebbe
 /// fuori dalla cartella di destinazione.
 pub(crate) fn safe_archive_basename(name: &str) -> String {
+    safe_basename(name, "decrypted.tar")
+}
+
+/// Variante con fallback esplicito, condivisa con Swift attraverso
+/// `safe_output_name`.
+///
+/// Swift ha lo stesso problema di Rust: il nome dell'header diventa il nome del
+/// file decifrato nella cartella di lavoro, e `URL.appendingPathComponent` non
+/// neutralizza le risalite. Riscrivere la sanificazione in Swift la farebbe
+/// divergere da questa — quindi ne esiste una sola.
+pub(crate) fn safe_basename(name: &str, fallback: &str) -> String {
     Path::new(name)
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .filter(|n| !n.is_empty() && n != "." && n != "..")
-        .unwrap_or_else(|| "decrypted.tar".to_string())
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 /// Estrae un TAR, rifiutando i percorsi che uscirebbero dalla cartella di

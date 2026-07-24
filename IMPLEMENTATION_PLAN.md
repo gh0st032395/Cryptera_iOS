@@ -325,7 +325,107 @@ l'operazione ideale per il primo end-to-end perché non scrive output.
 
 ---
 
-### M4 — Decrypt
+### M4 — Decrypt ✅ COMPLETATA (2026-07-24)
+
+**Exit raggiunto:** un `.ecf` aperto dall'esterno arriva nella schermata Decrypt
+già compilata, viene decifrato e salvato in File. Verificato sul simulatore: il
+file consegnato a *On My iPhone* è di 3000 byte, esattamente il `plain_size`
+dichiarato nell'header. **79 test verdi** — 38 Rust, 37 XCTest, 4 UI test.
+
+Realizzato: `FileAccess` (helper unico per lo scope), `TemporaryWorkspace`,
+UTType esportato `com.cryptera.ecf` con apertura in place, `.onOpenURL` →
+Decrypt, `DecryptView`/`DecryptModel`, `VerifyView` riscritta sul document
+picker, e la rimozione dello scaffolding a fixture di M3.
+
+#### Quattro scoperte con conseguenze
+
+**1. Il picker di sistema non si presenta dentro uno `.sheet` (grave, e muto).**
+`UIDocumentPickerViewController` è un servizio **fuori processo**: annidato in
+uno `.sheet` SwiftUI non compare affatto. Il pulsante "Salva in File"
+sembrava a posto e non faceva nulla — un difetto che **nessun test fermo
+all'esistenza del pulsante avrebbe visto**, ed è stato trovato solo ispezionando
+la schermata sul simulatore.
+
+Si usa `.fileMover`, che è il wrapper nativo dello stesso picker. **Non**
+`.fileExporter`: quello vuole un `FileDocument` o un `Transferable`, cioè il
+contenuto **in memoria** — un file decifrato di qualche gigabyte farebbe
+terminare il processo prima di riuscire a esportarlo. `.fileMover` lavora su URL
+e non legge nulla; in più **sposta**, quindi dell'output in chiaro resta un solo
+esemplare. Un UI test blocca ora la regressione.
+
+**2. Lo snippet di SPEC §6.1 rifiuta i percorsi interni all'app.**
+`startAccessingSecurityScopedResource()` torna `false` in due casi **opposti**:
+permesso negato, e URL che non ha bisogno di alcun permesso (container, bundle,
+cartella temporanea). Lo snippet della spec solleva `accessDenied` in entrambi —
+il che farebbe fallire proprio l'output di M4, che vive nella cartella di lavoro
+dell'app. Il discriminante è duplice: posizione dentro il container (copre i
+percorsi non ancora esistenti) o leggibilità effettiva (copre le cartelle
+concesse che stanno fuori).
+
+Il ramo di rifiuto **non è verificabile end-to-end sul simulatore**, dove
+`start` riesce anche su percorsi arbitrari: il test agisce quindi direttamente
+sul discriminante, che è la parte che contiene la decisione.
+
+**3. `FLAG_ENC_FILENAME` non è acceso quando il nome è nascosto.** Nasconderlo
+non significa cifrarlo: significa non memorizzarne alcuno. La distinzione conta
+per la UI — `filename` vuoto **con** flag acceso vuol dire "serve la password",
+**senza** flag vuol dire "questo file non ha un nome da mostrare". Emerso da
+un'asserzione sbagliata in un test, ed è ora fissato in entrambe le direzioni.
+
+**4. UniFFI non esporta i metodi dei record** (già visto sugli enum in M3):
+`is_tar_container` era invisibile a Swift. Riscrivere le maschere di §16.3 in
+Swift le avrebbe fatte divergere in silenzio — una maschera sbagliata non è un
+errore di compilazione, è una schermata che descrive il file in modo errato.
+Esposte come `describe_header`.
+
+Stessa ragione per `safe_output_name`: il nome dell'header diventa un percorso
+**anche in Swift**, quando nomina il file decifrato, e
+`URL.appendingPathComponent` non neutralizza né le risalite né i percorsi
+assoluti. È la stessa classe di difetto della revisione post-M3, sull'altro lato
+del confine. Una sola sanificazione, in Rust.
+
+#### Scelte di implementazione
+
+- **Una cartella di lavoro per operazione**, rimossa appena l'utente ha salvato,
+  annullato, o cambiato file; `purgeStale()` all'avvio elimina i residui di una
+  sessione interrotta. L'output è in chiaro: non deve sopravvivere alla schermata
+- **Il nome definitivo si conosce solo dopo la decifratura** — su v5 il nome
+  originale è cifrato nell'header — quindi si lavora su un segnaposto e si
+  rinomina alla fine
+- **Archivio estratto**: se contiene una sola voce di primo livello si consegna
+  quella, altrimenti l'utente riceverebbe una cartella dentro una cartella
+- **`ShareLink` solo sui file**: una cartella non è un contenuto che le
+  destinazioni della share sheet trattino in modo prevedibile. "Salva in File"
+  gestisce entrambi
+- **Aggancio `-apri-fixture` per i UI test.** Il `.fileImporter` è interfaccia di
+  sistema fuori processo e non è pilotabile; l'argomento inietta una fixture
+  attraverso lo **stesso** percorso di `.onOpenURL`, che è anche il flusso da
+  verificare. È il motivo per cui le fixture restano nel bundle in Debug
+- **Copertura di Verify spostata sul modello**: i suoi due UI test dipendevano
+  dal picker di fixture, ora rimosso
+
+#### Sovrascrittura: dove sta davvero la garanzia
+
+Con la strategia A di §6.3 la destinazione la sceglie il sistema, che **chiede**
+in caso di collisione — osservato salvando due volte lo stesso nome. `OUTPUT_EXISTS`
+resta la garanzia del livello Rust e ha un test, ma diventa centrale con la
+strategia B (scrittura diretta in una cartella autorizzata) e i bookmark
+persistenti di §6.4: **nessuno dei due è di M4**, perché il criterio di uscita
+non li richiede. Vanno affrontati quando si vorrà l'uso ripetuto fluido.
+
+#### Rinviato, deliberatamente
+
+| Cosa | Dove |
+|---|---|
+| Pausa dell'operazione (`CancelToken.set_paused`, esposto ma inutilizzato) | M5, con la sezione esecuzione |
+| Preflight memoria in decifratura — i parametri vengono dall'header e non sono negoziabili | M10, come da piano |
+| Verifica dello spazio prima di iniziare | M6 |
+| Bookmark persistenti, cartella di destinazione ricordata | dopo M8 |
+| Prova su device reale | bloccata da **D4** |
+
+---
+
+### M4 — dettaglio originale del piano
 
 - **Pulizia del debito di M3** (vedi sopra): rimuovere `VerifyView`, le fixture dal bundle dell'app e la relativa voce in `project.yml`
 - `FileAccess.swift`: helper `withSecurityScope` **unico e non duplicato** (§6.1). Lo scope va tenuto aperto per **tutta** la durata dell'operazione: chiuderlo prima produce `IO_ERROR` intermittenti su file grandi — è l'errore classico

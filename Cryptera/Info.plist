@@ -36,10 +36,72 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<!--
-	  Da aggiungere in M4 (SPEC §6.5): UTExportedTypeDeclarations per
-	  com.cryptera.ecf, CFBundleDocumentTypes con ruolo Editor,
-	  LSSupportsOpeningDocumentsInPlace, UISupportsDocumentBrowser = NO.
+	  SPEC §6.5 — integrazione con l'app File.
 
+	  Il tipo è **esportato**, non importato: il formato ECF1 è di Cryptera, non
+	  di terzi. Conforme a public.data e non a public.content, perché un .ecf è
+	  un contenitore opaco: nessuna app di sistema deve poterne anteprimare o
+	  indicizzare il contenuto.
+	-->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.cryptera.ecf</string>
+			<key>UTTypeDescription</key>
+			<string>Cryptera Encrypted File</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>ecf</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-cryptera-ecf</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Cryptera Encrypted File</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.cryptera.ecf</string>
+			</array>
+			<!--
+			  Editor e non Viewer: l'app decifra il file e ne produce uno nuovo.
+			  Con Viewer il sistema non proporrebbe Cryptera come destinazione
+			  per un .ecf.
+			-->
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+		</dict>
+	</array>
+	<!--
+	  Apre il .ecf dove si trova, senza copiarlo nel container. Senza questa
+	  chiave ogni apertura duplicherebbe il file in Documents/Inbox/, e quella
+	  copia resterebbe a carico dell'app (vedi FileAccess.discardIfInbox).
+	-->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<!--
+	  NO: l'interfaccia primaria non è un document browser (SPEC §6.5). Con YES
+	  l'app esporrebbe anche il proprio container in File, che non è desiderabile
+	  per un'app che vi tiene output decifrati temporanei.
+	-->
+	<key>UISupportsDocumentBrowser</key>
+	<false/>
+	<!--
 	  Da aggiungere in M11 (SPEC §14.1): ITSAppUsesNonExemptEncryption, solo
 	  dopo aver verificato e documentato la posizione sull'export compliance.
 	-->
