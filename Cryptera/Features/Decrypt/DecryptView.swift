@@ -36,14 +36,11 @@ struct DecryptView: View {
             guard let pending = router.pendingInput else { return }
             await model.select(pending.url)
         }
-        .fileImporter(isPresented: $choosingInput, allowedContentTypes: [.crypteraECF]) { result in
-            if case .success(let url) = result {
-                Task { await model.select(url) }
-            }
-        }
-        .fileImporter(isPresented: $choosingKeyfile, allowedContentTypes: [.item]) { result in
-            if case .success(let url) = result { model.selectKeyfile(url) }
-        }
+        // ⚠️ I due `.fileImporter` **non** stanno qui, ma ciascuno sulla card
+        // che lo apre. Due modificatori di presentazione dello stesso tipo sulla
+        // stessa view entrano in conflitto: SwiftUI ne onora uno solo e l'altro
+        // non apre nulla, senza errori né avvisi.
+        //
         // `fileMover` e non `fileExporter`: quest'ultimo vuole un `FileDocument`
         // o un `Transferable`, cioè il contenuto **in memoria** — un file
         // decifrato di qualche gigabyte farebbe terminare il processo prima di
@@ -90,6 +87,11 @@ struct DecryptView: View {
             if let header = model.header {
                 Divider()
                 metadata(header)
+            }
+        }
+        .fileImporter(isPresented: $choosingInput, allowedContentTypes: [.crypteraECF]) { result in
+            if case .success(let url) = result {
+                Task { await model.select(url) }
             }
         }
     }
@@ -154,6 +156,9 @@ struct DecryptView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+        }
+        .fileImporter(isPresented: $choosingKeyfile, allowedContentTypes: [.item]) { result in
+            if case .success(let url) = result { model.selectKeyfile(url) }
         }
     }
 

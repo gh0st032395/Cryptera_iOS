@@ -22,12 +22,9 @@ struct VerifyView: View {
             }
             .navigationTitle("Verifica")
         }
-        .fileImporter(isPresented: $choosingInput, allowedContentTypes: [.crypteraECF]) { result in
-            if case .success(let url) = result { model.select(url) }
-        }
-        .fileImporter(isPresented: $choosingKeyfile, allowedContentTypes: [.item]) { result in
-            if case .success(let url) = result { model.selectKeyfile(url) }
-        }
+        // ⚠️ I due `.fileImporter` stanno ciascuno sulla card che lo apre, non
+        // qui: due modificatori di presentazione dello stesso tipo sulla stessa
+        // view entrano in conflitto e SwiftUI ne onora uno solo, in silenzio.
     }
 
     private var inputCard: some View {
@@ -50,6 +47,9 @@ struct VerifyView: View {
                 .accessibilityIdentifier("verify.chooseInput")
             }
         }
+        .fileImporter(isPresented: $choosingInput, allowedContentTypes: [.crypteraECF]) { result in
+            if case .success(let url) = result { model.select(url) }
+        }
     }
 
     private var passwordCard: some View {
@@ -71,6 +71,9 @@ struct VerifyView: View {
                 Button("Aggiungi un keyfile") { choosingKeyfile = true }
                     .font(.subheadline.weight(.medium))
             }
+        }
+        .fileImporter(isPresented: $choosingKeyfile, allowedContentTypes: [.item]) { result in
+            if case .success(let url) = result { model.selectKeyfile(url) }
         }
     }
 

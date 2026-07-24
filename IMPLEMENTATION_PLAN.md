@@ -542,6 +542,35 @@ attiva il file reale è più piccolo, mai più grande.
   elemento diventa `staticText` o `otherElement` a seconda che contenga un
   pulsante, e legarli al tipo li farebbe fallire a ogni ritocco della vista
 
+#### Revisione post-M5 (2026-07-24) — il difetto che la suite non poteva vedere
+
+**Segnalato usando l'app, non trovato da un test: nessun pulsante di scelta del
+file apriva niente.** Su tutte e tre le schermate.
+
+Causa: **due `.fileImporter` applicati alla stessa view**. Due modificatori di
+presentazione dello stesso tipo sullo stesso punto della gerarchia entrano in
+conflitto — SwiftUI ne onora uno solo e l'altro non apre nulla, senza errori né
+avvisi in console. Ogni schermata ne aveva due, uno per l'input e uno per il
+keyfile: funzionava il secondo.
+
+Corretto attaccando ciascun importer alla card che lo apre, quindi a due view
+distinte.
+
+**Perché 99 test non l'hanno visto.** Tutti iniettano il file dall'argomento di
+lancio — la scorciatoia introdotta in M4 perché il `.fileImporter` è interfaccia
+di sistema, fuori processo e non pilotabile. Quella scorciatoia **salta
+esattamente il pezzo che si era rotto**, e sembrava un dettaglio di comodità
+quando è stata introdotta.
+
+`FilePickerUITests` copre ora il tratto scoperto: verifica che il selettore di
+sistema compaia davvero, su tutte e tre le schermate, e che sulla schermata
+Cifra funzionino **entrambi** — perché con uno solo per schermata il difetto
+sarebbe passato lo stesso.
+
+**Lezione, valida per M6 in avanti:** una scorciatoia introdotta per rendere
+testabile qualcosa crea una zona che i test non attraversano più, e va coperta
+di proposito. Il difetto era visibile in due secondi aprendo l'app.
+
 #### Rinviato
 
 | Cosa | Dove |

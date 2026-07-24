@@ -41,12 +41,11 @@ struct EncryptView: View {
             guard let pending = router.pendingEncryptInput else { return }
             model.select(pending.url)
         }
-        .fileImporter(isPresented: $choosingInput, allowedContentTypes: [.item]) { result in
-            if case .success(let url) = result { model.select(url) }
-        }
-        .fileImporter(isPresented: $choosingKeyfile, allowedContentTypes: [.item]) { result in
-            if case .success(let url) = result { model.selectKeyfile(url) }
-        }
+        // ⚠️ I due `.fileImporter` **non** stanno qui, ma ciascuno sulla card
+        // che lo apre. Due modificatori di presentazione dello stesso tipo sulla
+        // stessa view entrano in conflitto: SwiftUI ne onora uno solo e l'altro
+        // non apre nulla, senza errori né avvisi. È esattamente ciò che
+        // succedeva — il pulsante di scelta del file non faceva niente.
         .fileMover(isPresented: $exporting, file: model.output?.url) { result in
             if case .success = result { model.discardWork() }
         }
@@ -91,6 +90,9 @@ struct EncryptView: View {
                 .accessibilityIdentifier("encrypt.chooseInput")
             }
         }
+        .fileImporter(isPresented: $choosingInput, allowedContentTypes: [.item]) { result in
+            if case .success(let url) = result { model.select(url) }
+        }
     }
 
     private var passwordCard: some View {
@@ -134,6 +136,9 @@ struct EncryptView: View {
                     .font(.subheadline.weight(.medium))
                     .accessibilityIdentifier("encrypt.addKeyfile")
             }
+        }
+        .fileImporter(isPresented: $choosingKeyfile, allowedContentTypes: [.item]) { result in
+            if case .success(let url) = result { model.selectKeyfile(url) }
         }
     }
 

@@ -22,7 +22,7 @@ La specifica di riferimento è in [`SPEC.md`](SPEC.md).
 | M2 — XCFramework | ✅ **app verde su simulatore** |
 | M3 — Primo end-to-end (`verify`) | ✅ **48 test verdi, revisionata** |
 | M4 — Decrypt | ✅ **79 test verdi, verificata sul simulatore** |
-| M5 — Encrypt file | ✅ **99 test verdi, con design system anticipato da M9** |
+| M5 — Encrypt file | ✅ **103 test verdi, con design system anticipato da M9** |
 | M6 — Encrypt cartella | ⬜ |
 | M7 — Round-trip incrociato (**gate di rilascio**) | ⬜ |
 | M8 — Batch + Audit | ⬜ |
