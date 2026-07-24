@@ -26,7 +26,7 @@ final class EncryptFlowTests: XCTestCase {
     func testRoundTripFraLeDueSchermate() async throws {
         let contenuto = "un segreto che deve tornare identico"
         let model = EncryptModel()
-        model.select(try fileDiProva(contenuto))
+        await model.select(try fileDiProva(contenuto))
         model.password = strongPassword
         model.passwordConfirmation = strongPassword
 
@@ -52,9 +52,9 @@ final class EncryptFlowTests: XCTestCase {
     }
 
     /// La policy del desktop **blocca** la cifratura, non avvisa soltanto.
-    func testPasswordDeboleImpedisceLaCifratura() throws {
+    func testPasswordDeboleImpedisceLaCifratura() async throws {
         let model = EncryptModel()
-        model.select(try fileDiProva())
+        await model.select(try fileDiProva())
 
         model.password = "abc"
         model.passwordConfirmation = "abc"
@@ -67,9 +67,9 @@ final class EncryptFlowTests: XCTestCase {
         XCTAssertTrue(model.canRun)
     }
 
-    func testConfermaDiversaImpedisceLaCifratura() throws {
+    func testConfermaDiversaImpedisceLaCifratura() async throws {
         let model = EncryptModel()
-        model.select(try fileDiProva())
+        await model.select(try fileDiProva())
         model.password = strongPassword
         model.passwordConfirmation = strongPassword + "x"
 
@@ -82,7 +82,7 @@ final class EncryptFlowTests: XCTestCase {
         model.password = strongPassword
         model.passwordConfirmation = strongPassword
         XCTAssertFalse(model.canRun)
-        XCTAssertEqual(model.blockingReason, "Choose a file to encrypt.")
+        XCTAssertEqual(model.blockingReason, "Choose a file or folder to encrypt.")
     }
 
     /// I profili devono cambiare davvero il file prodotto, non solo l'etichetta
@@ -90,7 +90,7 @@ final class EncryptFlowTests: XCTestCase {
     /// quelli di default e nessun'altra asserzione se ne accorgerebbe.
     func testIlProfiloDiIntegritaArrivaFinoAllHeader() async throws {
         let model = EncryptModel()
-        model.select(try fileDiProva())
+        await model.select(try fileDiProva())
         model.password = strongPassword
         model.passwordConfirmation = strongPassword
         model.integrityProfile = .max
@@ -105,7 +105,7 @@ final class EncryptFlowTests: XCTestCase {
 
     func testIlProfiloDiSicurezzaArrivaFinoAllHeader() async throws {
         let model = EncryptModel()
-        model.select(try fileDiProva())
+        await model.select(try fileDiProva())
         model.password = strongPassword
         model.passwordConfirmation = strongPassword
         model.securityProfile = .strong
@@ -125,7 +125,7 @@ final class EncryptFlowTests: XCTestCase {
     /// schermata: senza rilettura, un predefinito cambiato nelle impostazioni
     /// resterebbe salvato e inerte. Ma rileggerlo sempre sovrascriverebbe le
     /// scelte fatte apposta per il file in corso.
-    func testIPredefinitiSiRileggonoSoloASchermataFerma() throws {
+    func testIPredefinitiSiRileggonoSoloASchermataFerma() async throws {
         let defaults = UserDefaults.standard
         // Si parte da pulito: le impostazioni sopravvivono fra un'esecuzione e
         // l'altra nel contenitore dell'app, e un UI test che ne ha cambiata una
@@ -142,7 +142,7 @@ final class EncryptFlowTests: XCTestCase {
 
         // Con un file scelto la rilettura non deve toccare nulla: quelle sono
         // scelte fatte per **questo** file.
-        model.select(try fileDiProva())
+        await model.select(try fileDiProva())
         model.securityProfile = .standard
         defaults.set(SecurityProfile.strong.storageValue, forKey: PreferenceKey.securityProfile)
         model.refreshDefaultsIfIdle()
@@ -151,9 +151,9 @@ final class EncryptFlowTests: XCTestCase {
 
     /// La stima serve a non far scoprire a operazione finita che il file è
     /// quattro volte più grande.
-    func testLaStimaCresceConIlProfiloDiIntegrita() throws {
+    func testLaStimaCresceConIlProfiloDiIntegrita() async throws {
         let model = EncryptModel()
-        model.select(try fileDiProva(String(repeating: "x", count: 100_000)))
+        await model.select(try fileDiProva(String(repeating: "x", count: 100_000)))
 
         model.integrityProfile = .low
         XCTAssertEqual(model.integrityOverheadPercent, 14)  // r 4 / k 28
@@ -168,7 +168,7 @@ final class EncryptFlowTests: XCTestCase {
 
     func testLePasswordVengonoAzzerateDopoLUso() async throws {
         let model = EncryptModel()
-        model.select(try fileDiProva())
+        await model.select(try fileDiProva())
         model.password = strongPassword
         model.passwordConfirmation = strongPassword
 
@@ -183,7 +183,7 @@ final class EncryptFlowTests: XCTestCase {
 
     func testUnaSecondaEsecuzioneNonLasciaOrfanaLaPrecedente() async throws {
         let model = EncryptModel()
-        model.select(try fileDiProva())
+        await model.select(try fileDiProva())
         model.password = strongPassword
         model.passwordConfirmation = strongPassword
 

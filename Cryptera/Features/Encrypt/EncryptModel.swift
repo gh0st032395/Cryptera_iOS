@@ -2,17 +2,29 @@ import Foundation
 
 /// Stato della schermata Encrypt (SPEC §8.2).
 ///
-/// M5 copre il **file singolo**. La cartella è M6: aggiunge il TAR intermedio e
-/// la verifica dello spazio, che nel caso peggiore serve al doppio della
-/// sorgente più l'overhead di parità.
+/// Copre file singoli (M5) e cartelle (M6). La differenza non è solo l'input:
+/// una cartella passa da un **archivio TAR intermedio**, quindi ha una
+/// compressione propria e un fabbisogno di spazio molto maggiore, che va
+/// verificato prima di iniziare.
 @MainActor
 @Observable
 final class EncryptModel {
 
     struct Selection: Equatable {
+        enum Kind {
+            case file
+            case folder
+        }
+
         let url: URL
+        let kind: Kind
+        /// Somma dei file contenuti, per una cartella. `nil` se non misurabile.
         let size: UInt64?
+        /// Quanti file contiene, solo per le cartelle.
+        let fileCount: Int?
+
         var name: String { url.lastPathComponent }
+        var isFolder: Bool { kind == .folder }
     }
 
     struct Output: Equatable {
@@ -23,6 +35,8 @@ final class EncryptModel {
 
     // ─── Input ─────────────────────────────────────────────────────
     private(set) var input: Selection?
+    /// La misura di una cartella grande non è istantanea.
+    private(set) var isMeasuring = false
     var password = ""
     var passwordConfirmation = ""
     private(set) var keyfile: Selection?
@@ -32,13 +46,28 @@ final class EncryptModel {
     // I valori iniziali arrivano dalle impostazioni: chi cifra sempre allo
     // stesso modo non deve riaprire il pannello a ogni file.
     var payloadCompression: PayloadCompression
+    var archiveCompression: ArchiveCompression
     var securityProfile: SecurityProfile
     var integrityProfile: IntegrityProfile
     var hideFilename = false
     var enablePasswordCheck = true
+    /// Attivo come nell'upstream: symlink e file speciali fanno fallire
+    /// l'archiviazione più spesso di quanto servano.
+    var skipSpecialFiles = true
+
+    // ─── Esecuzione ────────────────────────────────────────────────
+    private(set) var isRunning = false
+    private(set) var isPaused = false
+    private(set) var progress: OperationProgress?
+    private(set) var errorMessage: String?
+    private(set) var output: Output?
+
+    private var token: CancelToken?
+    private var workspace: TemporaryWorkspace?
 
     init(defaults: EncryptionDefaults = .current) {
         payloadCompression = defaults.payloadCompression
+        archiveCompression = defaults.archiveCompression
         securityProfile = defaults.securityProfile
         integrityProfile = defaults.integrityProfile
     }
@@ -57,19 +86,10 @@ final class EncryptModel {
         guard input == nil, output == nil, !isRunning, password.isEmpty else { return }
         let defaults = EncryptionDefaults.current
         payloadCompression = defaults.payloadCompression
+        archiveCompression = defaults.archiveCompression
         securityProfile = defaults.securityProfile
         integrityProfile = defaults.integrityProfile
     }
-
-    // ─── Esecuzione ────────────────────────────────────────────────
-    private(set) var isRunning = false
-    private(set) var isPaused = false
-    private(set) var progress: OperationProgress?
-    private(set) var errorMessage: String?
-    private(set) var output: Output?
-
-    private var token: CancelToken?
-    private var workspace: TemporaryWorkspace?
 
     // MARK: - Derivati
 
@@ -84,7 +104,13 @@ final class EncryptModel {
     /// Un unico punto: la vista mostra questo motivo accanto al pulsante
     /// disattivato, invece di lasciare l'utente a indovinare cosa manca.
     var blockingReason: String? {
-        if input == nil { return L.t("Choose a file to encrypt.") }
+        if input == nil { return L.t("Choose a file or folder to encrypt.") }
+        if isMeasuring { return L.t("Measuring the folder…") }
+        // Prima della password: lo spazio non dipende da cosa si digita, e
+        // scoprirlo dopo aver scelto una password sarebbe una perdita di tempo.
+        if !hasEnoughStorage {
+            return L.t("There is not enough free space: about %@ are needed.", requiredStorage)
+        }
         if password.isEmpty { return L.t("Enter a password.") }
         // La stessa regola del desktop, che **impedisce** la cifratura e non si
         // limita ad avvisare (`operations.js`, `handleEncrypt`). Il messaggio
@@ -100,6 +126,10 @@ final class EncryptModel {
     }
 
     var canRun: Bool { blockingReason == nil && !isRunning }
+
+    /// L'input è una cartella: cambiano le opzioni mostrate e il fabbisogno di
+    /// spazio.
+    var isFolderInput: Bool { input?.isFolder == true }
 
     /// Il profilo di sicurezza è eseguibile con la memoria disponibile ora?
     ///
@@ -134,20 +164,104 @@ final class EncryptModel {
         return SizeFormatter.string(UInt64(withParity))
     }
 
+    /// Spazio necessario, comprensivo dell'archivio intermedio per le cartelle.
+    var requiredStorage: String {
+        SizeFormatter.string(
+            StorageCheck.requiredBytes(
+                source: input?.size ?? 0,
+                parityOverheadPercent: integrityOverheadPercent,
+                needsArchive: isFolderInput
+            )
+        )
+    }
+
+    /// Verifica di SPEC §11.4, fatta **prima** di iniziare.
+    ///
+    /// Con una cartella serve circa il doppio della sorgente più la parità:
+    /// fallire a metà avrebbe già speso minuti di CPU e riempito il disco.
+    var hasEnoughStorage: Bool {
+        guard let size = input?.size else { return true }
+        return StorageCheck.hasRoom(
+            forSource: size,
+            parityOverheadPercent: integrityOverheadPercent,
+            needsArchive: isFolderInput,
+            on: FileManager.default.temporaryDirectory
+        )
+    }
+
+    /// C'è qualcosa da azzerare?
+    var hasWorkInProgress: Bool {
+        input != nil || keyfile != nil || !password.isEmpty
+            || !passwordConfirmation.isEmpty || output != nil || errorMessage != nil
+    }
+
     // MARK: - Selezione
 
-    func select(_ url: URL) {
-        input = Selection(url: url, size: Self.fileSize(of: url))
+    /// Accetta sia un file sia una cartella; il tipo si legge dall'URL, non da
+    /// cosa l'utente ha chiesto di scegliere — il selettore di sistema può
+    /// sempre restituire altro.
+    func select(_ url: URL) async {
         discardWork()
         errorMessage = nil
+
+        let isFolder = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        guard isFolder else {
+            input = Selection(url: url, kind: .file, size: Self.fileSize(of: url), fileCount: nil)
+            return
+        }
+
+        // Una cartella va attraversata per sapere quanto pesa, e su una cartella
+        // grande non è istantaneo: si mostra lo stato e si misura fuori dal main
+        // actor.
+        input = Selection(url: url, kind: .folder, size: nil, fileCount: nil)
+        isMeasuring = true
+        defer { isMeasuring = false }
+
+        let measurement = await Task.detached {
+            try? await FileAccess.withSecurityScope(url) { _ in
+                StorageCheck.measureFolder(at: url)
+            }
+        }.value
+
+        // L'utente può aver cambiato scelta mentre si misurava.
+        guard input?.url == url else { return }
+        input = Selection(
+            url: url,
+            kind: .folder,
+            size: measurement?.bytes,
+            fileCount: measurement?.files
+        )
     }
 
     func selectKeyfile(_ url: URL) {
-        keyfile = Selection(url: url, size: Self.fileSize(of: url))
+        keyfile = Selection(url: url, kind: .file, size: Self.fileSize(of: url), fileCount: nil)
     }
 
     func clearKeyfile() {
         keyfile = nil
+    }
+
+    /// Riporta la schermata allo stato iniziale.
+    ///
+    /// Le opzioni tornano ai predefiniti delle impostazioni, non a quelli di
+    /// serie: "da capo" significa il punto da cui si parte di solito, non un
+    /// punto che l'utente non ha mai scelto.
+    func reset() {
+        discardWork()
+        input = nil
+        keyfile = nil
+        password = ""
+        passwordConfirmation = ""
+        errorMessage = nil
+        hideFilename = false
+        enablePasswordCheck = true
+        skipSpecialFiles = true
+
+        let defaults = EncryptionDefaults.current
+        payloadCompression = defaults.payloadCompression
+        archiveCompression = defaults.archiveCompression
+        securityProfile = defaults.securityProfile
+        integrityProfile = defaults.integrityProfile
     }
 
     // MARK: - Esecuzione
@@ -178,9 +292,9 @@ final class EncryptModel {
         }
         self.workspace = workspace
 
-        // Il `.ecf` prende il nome del file di partenza. Non è un dato che
-        // proviene da un file cifrato, quindi non c'è nulla da sanificare: è il
-        // nome che l'utente ha scelto nel picker.
+        // Il `.ecf` prende il nome dell'input. Non è un dato che proviene da un
+        // file cifrato, quindi non c'è nulla da sanificare: è il nome che
+        // l'utente ha scelto nel picker.
         let destination = workspace.directory
             .appendingPathComponent("\(input.name).ecf", isDirectory: false)
 
@@ -197,15 +311,20 @@ final class EncryptModel {
             self.token = nil
         }
 
+        // Valori copiati fuori dal main actor prima di attraversare il confine:
+        // la closure non deve catturare il modello per leggerli.
         let password = password
         let inputURL = input.url
+        let isFolder = input.isFolder
         let keyfileURL = keyfile?.url
-        let request = (
+        let options = (
             payload: payloadCompression,
+            archive: archiveCompression,
             security: securityProfile,
             integrity: integrityProfile,
             hide: hideFilename,
-            check: enablePasswordCheck
+            check: enablePasswordCheck,
+            skipSpecial: skipSpecialFiles
         )
 
         do {
@@ -215,19 +334,20 @@ final class EncryptModel {
             ) { inputPath, keyfilePath in
                 try await CrypteraEngine.shared.encrypt(
                     EncryptRequest(
-                        source: .file(path: inputPath),
+                        source: isFolder ? .folder(path: inputPath) : .file(path: inputPath),
                         outputPath: destination.path,
                         password: password,
                         keyfilePath: keyfilePath,
-                        payloadCompression: request.payload,
-                        // Riguarda solo le cartelle (M6): qui il payload è un
-                        // file, non un archivio.
-                        archiveCompression: .none,
-                        skipSpecialFiles: false,
-                        enablePasswordCheck: request.check,
-                        hideFilename: request.hide,
-                        securityProfile: request.security,
-                        integrityProfile: request.integrity
+                        // Per una cartella il payload è il TAR, che è già
+                        // compresso secondo `archiveCompression`: comprimerlo
+                        // due volte lo farebbe solo crescere.
+                        payloadCompression: isFolder ? .none : options.payload,
+                        archiveCompression: options.archive,
+                        skipSpecialFiles: options.skipSpecial,
+                        enablePasswordCheck: options.check,
+                        hideFilename: options.hide,
+                        securityProfile: options.security,
+                        integrityProfile: options.integrity
                     ),
                     token: token,
                     onProgress: { [weak self] update in
@@ -245,33 +365,6 @@ final class EncryptModel {
             discardWork()
             errorMessage = ErrorPresenter.unexpected
         }
-    }
-
-    /// C'è qualcosa da azzerare?
-    var hasWorkInProgress: Bool {
-        input != nil || keyfile != nil || !password.isEmpty
-            || !passwordConfirmation.isEmpty || output != nil || errorMessage != nil
-    }
-
-    /// Riporta la schermata allo stato iniziale.
-    ///
-    /// Le opzioni tornano ai predefiniti delle impostazioni, non a quelli di
-    /// serie: "da capo" significa il punto da cui si parte di solito, non un
-    /// punto che l'utente non ha mai scelto.
-    func reset() {
-        discardWork()
-        input = nil
-        keyfile = nil
-        password = ""
-        passwordConfirmation = ""
-        errorMessage = nil
-        hideFilename = false
-        enablePasswordCheck = true
-
-        let defaults = EncryptionDefaults.current
-        payloadCompression = defaults.payloadCompression
-        securityProfile = defaults.securityProfile
-        integrityProfile = defaults.integrityProfile
     }
 
     /// L'output cifrato non contiene segreti in chiaro, ma occupa spazio e non

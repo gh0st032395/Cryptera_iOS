@@ -22,7 +22,6 @@
 "Encrypted file" = "File cifrato";
 "Choose a file" = "Scegli un file";
 "Choose an .ecf file" = "Scegli un file .ecf";
-"Folders are coming later" = "Le cartelle arrivano più avanti";
 "Or open one from the Files app" = "Oppure aprine uno dall'app File";
 "Checks its integrity without writing it out" = "Ne controlla l'integrità senza scriverlo su disco";
 "Change" = "Cambia";
@@ -83,7 +82,6 @@
 ", for a file of about %@" = ", per un file di circa %@";
 "More recovery data means surviving more damage." = "Più dati di recupero significa sopravvivere a più danni.";
 "With compression on, the result will be smaller." = "Con la compressione attiva il risultato sarà più piccolo.";
-"LZMA compresses more and is slower. On already compressed files — photos, video, archives — neither helps." = "LZMA comprime di più ed è più lenta. Su file già compressi — foto, video, archivi — nessuna delle due aiuta.";
 "This profile needs more memory than is available right now. Encrypting could make the app quit abruptly." = "Questo profilo chiede più memoria di quanta ne sia disponibile ora. Cifrare potrebbe far chiudere l'app di colpo.";
 
 // MARK: - Esecuzione
@@ -98,7 +96,6 @@
 "Resume" = "Riprendi";
 "Cancel" = "Annulla";
 
-"Choose a file to encrypt." = "Scegli un file da cifrare.";
 "This device does not have enough memory for the chosen profile." = "Questo dispositivo non ha memoria sufficiente per il profilo scelto.";
 
 // MARK: - Avviso di irreversibilità — pwd_warning_*
@@ -182,3 +179,22 @@
 "Discard and start over" = "Scarta e ricomincia";
 "The decrypted file has not been saved yet. It will be deleted." = "Il file decifrato non è ancora stato salvato. Verrà eliminato.";
 "The encrypted file has not been saved yet. It will be deleted." = "Il file cifrato non è ancora stato salvato. Verrà eliminato.";
+
+// MARK: - Cartelle (M6)
+
+"Choose a file or folder to encrypt." = "Scegli un file o una cartella da cifrare.";
+"Any file on this device or in iCloud" = "Un file qualsiasi, su questo dispositivo o in iCloud";
+"Choose a folder" = "Scegli una cartella";
+"Everything inside goes into a single encrypted archive" = "Tutto il contenuto finisce in un unico archivio cifrato";
+"Measuring…" = "Misurazione…";
+"Measuring the folder…" = "Misurazione della cartella…";
+"%d files · %@" = "%1$d file · %2$@";
+"Archive compression" = "Compressione archivio";
+"Skip symlinks and special files" = "Salta link simbolici e file speciali";  // check_skip_special
+"Stronger compression means a smaller file and a longer wait. On already compressed content — photos, video, archives — none of them helps." = "Più compressione significa file più piccolo e attesa più lunga. Su contenuti già compressi — foto, video, archivi — nessuna aiuta.";
+"There is not enough free space: about %@ are needed." = "Spazio libero insufficiente: ne servono circa %@.";
+
+// Compressione archivio — opt_gz, opt_bz2, opt_xz
+"Gzip (fast)" = "Gzip (veloce)";
+"Bzip2 (ratio)" = "Bzip2 (rapporto)";
+"XZ (best)" = "XZ (massima)";

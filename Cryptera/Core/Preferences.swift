@@ -67,6 +67,7 @@ enum PreferenceKey {
     static let securityProfile = "defaultSecurityProfile"
     static let integrityProfile = "defaultIntegrityProfile"
     static let payloadCompression = "defaultPayloadCompression"
+    static let archiveCompression = "defaultArchiveCompression"
     static let irreversibilityAcknowledged = "irreversibilityAcknowledged"
 }
 
@@ -78,12 +79,19 @@ struct EncryptionDefaults {
     var securityProfile: SecurityProfile
     var integrityProfile: IntegrityProfile
     var payloadCompression: PayloadCompression
+    var archiveCompression: ArchiveCompression
 
     /// Gli stessi predefiniti del desktop, finché non si cambiano.
+    ///
+    /// `archiveCompression` è `none` perché lo è nell'upstream
+    /// (`ui/index.html`, `encFolderComp` con `value="none"`): non cambia la
+    /// compatibilità del formato, ma partire da un valore diverso darebbe
+    /// output di dimensione diversa a parità di scelte fatte dall'utente.
     static let builtIn = EncryptionDefaults(
         securityProfile: .standard,
         integrityProfile: .standard,
-        payloadCompression: .zlib
+        payloadCompression: .zlib,
+        archiveCompression: .none
     )
 
     static var current: EncryptionDefaults {
@@ -97,7 +105,10 @@ struct EncryptionDefaults {
             ) ?? builtIn.integrityProfile,
             payloadCompression: PayloadCompression(
                 storageValue: defaults.string(forKey: PreferenceKey.payloadCompression)
-            ) ?? builtIn.payloadCompression
+            ) ?? builtIn.payloadCompression,
+            archiveCompression: ArchiveCompression(
+                storageValue: defaults.string(forKey: PreferenceKey.archiveCompression)
+            ) ?? builtIn.archiveCompression
         )
     }
 }
@@ -170,6 +181,40 @@ extension IntegrityProfile: CaseIterable {
         case .standard: return L.t("Balanced")
         case .high: return L.t("High")
         case .max: return L.t("Maximum")
+        }
+    }
+}
+
+extension ArchiveCompression: CaseIterable {
+    public static var allCases: [ArchiveCompression] { [.none, .gzip, .bzip2, .xz] }
+
+    var storageValue: String {
+        switch self {
+        case .none: return "none"
+        case .gzip: return "gz"
+        case .bzip2: return "bz2"
+        case .xz: return "xz"
+        }
+    }
+
+    init?(storageValue: String?) {
+        switch storageValue {
+        case "none": self = .none
+        case "gz": self = .gzip
+        case "bz2": self = .bzip2
+        case "xz": self = .xz
+        default: return nil
+        }
+    }
+
+    /// Le etichette dell'upstream (`opt_gz`, `opt_bz2`, `opt_xz`) portano con sé
+    /// il compromesso, che è l'informazione che serve per scegliere.
+    var label: String {
+        switch self {
+        case .none: return L.t("None")
+        case .gzip: return L.t("Gzip (fast)")
+        case .bzip2: return L.t("Bzip2 (ratio)")
+        case .xz: return L.t("XZ (best)")
         }
     }
 }

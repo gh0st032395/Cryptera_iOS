@@ -688,7 +688,65 @@ Opzioni, progress, pausa/annulla. Punti che la UI deve rendere espliciti:
 
 ---
 
-### M6 — Encrypt cartella
+### M6 — Encrypt cartella ✅ COMPLETATA (2026-07-24)
+
+**Exit raggiunto:** si sceglie una cartella, si cifra in un unico `.ecf`, e la
+si riestrae dalla schermata Decifra con struttura e contenuti intatti — il
+round-trip è un test. **134 test verdi** (39 Rust, 74 XCTest, 21 UI test).
+
+Il grosso del lavoro era già in piedi: `InputSource::Folder`, `create_tar` e il
+pre-conteggio delle entry vengono da M3. M6 ha aggiunto il lato iOS.
+
+#### Il pezzo che è davvero di M6: lo spazio
+
+Una cartella passa da un **archivio TAR intermedio**, quindi serve circa il
+doppio della sorgente, più la parità: con il profilo massimo si superano le
+**cinque volte** la cartella di partenza. Scoprirlo a metà operazione significa
+aver già speso minuti di CPU e riempito il disco.
+
+`StorageCheck` verifica prima di iniziare, con
+`volumeAvailableCapacityForImportantUsage` — il valore che tiene conto di quanto
+iOS è disposto a liberare, non la capacità grezza. La stima è **volutamente per
+eccesso**: ignora la compressione, il cui effetto dipende dal contenuto. Un
+preflight che sbaglia per eccesso rifiuta qualche caso che sarebbe passato; uno
+che sbaglia per difetto lascia l'utente a metà strada.
+
+Quando il sistema non espone la capacità non si blocca nulla: rifiutare per un
+dato mancante sarebbe peggio che provarci.
+
+#### Scelte
+
+- **Compressione archivio al posto di quella del payload.** Per una cartella il
+  payload *è* il TAR, già compresso secondo `archiveCompression`: comprimerlo
+  due volta lo farebbe solo crescere. La UI mostra l'una o l'altra, mai
+  entrambe, e un test verifica che il flag di compressione del payload resti
+  spento nell'header anche se l'impostazione dice altro
+- **Predefiniti dell'upstream**: archivio `none` (`ui/index.html`,
+  `encFolderComp`) e "salta file speciali" attivo. Non cambiano la compatibilità
+  del formato, ma partire da valori diversi darebbe output di dimensione diversa
+  a parità di scelte
+- **Un solo `.fileImporter` per due pulsanti**, con il tipo che cambia: due
+  sulla stessa view sarebbero entrati in conflitto, ed è già successo
+- **Il tipo si rilegge dall'URL**, non da cosa si stava scegliendo: il selettore
+  di sistema può sempre restituire altro
+- **La misura della cartella avviene fuori dal main actor** e con lo scope
+  aperto — su una cartella grande l'attraversamento non è istantaneo — e la si
+  scarta se nel frattempo l'utente ha cambiato scelta
+
+#### Due difetti trovati dai test appena scritti
+
+- **`requiredBytes` andava in trap** su dimensioni assurde: `Double` → `UInt64`
+  con overflow termina il processo. Un preflight non può essere il punto in cui
+  l'app muore, tanto più che il dato arriva dal filesystem. Ora satura, e il
+  valore saturato viene comunque rifiutato dal confronto — che è l'esito giusto
+- **Un identificatore sul `DisclosureGroup` sovrascriveva quelli dei figli**:
+  tutti e tre gli interruttori delle opzioni si chiamavano `encrypt.options`.
+  Stessa classe del difetto già visto su `ChoiceRow`, e vale la regola generale:
+  **gli identificatori vanno sulle foglie**
+
+---
+
+### M6 — dettaglio originale del piano
 
 TAR + compressione archivio. La cifratura di cartelle **è possibile**: un URL di
 cartella dal picker è navigabile ricorsivamente con `walkdir` finché lo scope è

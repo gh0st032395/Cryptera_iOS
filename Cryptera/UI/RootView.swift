@@ -90,6 +90,7 @@ struct RootView: View {
             #if DEBUG
             if let url = LaunchArguments.fixtureToOpen() { router.open(url) }
             if let url = LaunchArguments.fixtureToEncrypt() { router.openForEncryption(url) }
+            if let url = LaunchArguments.folderToEncrypt() { router.openForEncryption(url) }
             #endif
         }
     }
@@ -114,10 +115,29 @@ enum LaunchArguments {
     /// Consegna una fixture alla schermata Cifra. Vale come file qualsiasi: a
     /// cifrare, un `.ecf` è un file come un altro.
     static let encryptFixture = "-cifra-fixture"
+    /// Costruisce una cartella di prova e la consegna alla schermata Cifra.
+    /// Le cartelle non si possono mettere nel bundle come le fixture, e il
+    /// selettore di sistema non è pilotabile: senza questo, il percorso
+    /// cartella di M6 non sarebbe raggiungibile da un UI test.
+    static let encryptFolder = "-cifra-cartella"
 
     static func fixtureToOpen() -> URL? { fixture(after: openFixture) }
 
     static func fixtureToEncrypt() -> URL? { fixture(after: encryptFixture) }
+
+    /// Cartella con due file e una sottocartella, ricreata a ogni avvio.
+    static func folderToEncrypt() -> URL? {
+        guard ProcessInfo.processInfo.arguments.contains(encryptFolder) else { return nil }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cartella-di-prova", isDirectory: true)
+        try? FileManager.default.removeItem(at: root)
+        let sub = root.appendingPathComponent("dentro", isDirectory: true)
+        guard (try? FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)) != nil,
+              (try? Data("uno".utf8).write(to: root.appendingPathComponent("uno.txt"))) != nil,
+              (try? Data("due".utf8).write(to: sub.appendingPathComponent("due.txt"))) != nil
+        else { return nil }
+        return root
+    }
 
     private static func fixture(after flag: String) -> URL? {
         let arguments = ProcessInfo.processInfo.arguments

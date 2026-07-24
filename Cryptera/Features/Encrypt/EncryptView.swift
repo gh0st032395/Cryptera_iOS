@@ -10,8 +10,16 @@ import SwiftUI
 struct EncryptView: View {
     let router: AppRouter
 
+    /// Cosa si sta scegliendo. **Un solo `.fileImporter`** serve entrambi i
+    /// pulsanti: due, sulla stessa view, entrerebbero in conflitto e uno dei due
+    /// non aprirebbe nulla — è già successo.
+    private enum Picking {
+        case file
+        case folder
+    }
+
     @State private var model = EncryptModel()
-    @State private var choosingInput = false
+    @State private var picking: Picking?
     @State private var choosingKeyfile = false
     @State private var exporting = false
     @State private var optionsExpanded = false
@@ -53,7 +61,7 @@ struct EncryptView: View {
         }
         .task(id: router.pendingEncryptInput) {
             guard let pending = router.pendingEncryptInput else { return }
-            model.select(pending.url)
+            await model.select(pending.url)
         }
         // I predefiniti possono essere cambiati mentre questa schermata esiste
         // già: la `TabView` la costruisce una volta sola.
@@ -84,24 +92,58 @@ struct EncryptView: View {
             if let input = model.input {
                 FileTile(
                     name: input.name,
-                    detail: input.size.map(SizeFormatter.string),
-                    systemImage: "doc",
+                    detail: inputDetail(input),
+                    systemImage: input.isFolder ? "folder" : "doc",
                     changeTitle: L.t("Change"),
-                    onChange: { choosingInput = true }
+                    onChange: { picking = input.isFolder ? .folder : .file }
                 )
                 .accessibilityIdentifier("encrypt.input")
             } else {
                 FilePlaceholder(
                     title: L.t("Choose a file"),
-                    subtitle: L.t("Folders are coming later"),
-                    action: { choosingInput = true }
+                    subtitle: L.t("Any file on this device or in iCloud"),
+                    action: { picking = .file }
                 )
                 .accessibilityIdentifier("encrypt.chooseInput")
+
+                Divider()
+
+                FilePlaceholder(
+                    title: L.t("Choose a folder"),
+                    subtitle: L.t("Everything inside goes into a single encrypted archive"),
+                    systemImage: "folder.badge.plus",
+                    action: { picking = .folder }
+                )
+                .accessibilityIdentifier("encrypt.chooseFolder")
             }
         }
-        .fileImporter(isPresented: $choosingInput, allowedContentTypes: [.item]) { result in
-            if case .success(let url) = result { model.select(url) }
+        .fileImporter(
+            isPresented: Binding(
+                get: { picking != nil },
+                set: { if !$0 { picking = nil } }
+            ),
+            // Le cartelle richiedono un tipo diverso: un unico selettore che
+            // cambia tipo evita di averne due sulla stessa view.
+            allowedContentTypes: picking == .folder ? [.folder] : [.item]
+        ) { result in
+            picking = nil
+            // Il tipo si rilegge dall'URL e non da cosa si stava scegliendo: il
+            // selettore di sistema può sempre restituire altro.
+            if case .success(let url) = result {
+                Task { await model.select(url) }
+            }
         }
+    }
+
+    /// Riga di dettaglio dell'input: per una cartella la dimensione da sola non
+    /// dice quanto lavoro sarà, il numero di file sì.
+    private func inputDetail(_ input: EncryptModel.Selection) -> String? {
+        if model.isMeasuring { return L.t("Measuring…") }
+        guard let size = input.size else { return nil }
+        guard input.isFolder, let files = input.fileCount else {
+            return SizeFormatter.string(size)
+        }
+        return L.t("%d files · %@", files, SizeFormatter.string(size))
     }
 
     private var passwordCard: some View {
@@ -163,6 +205,10 @@ struct EncryptView: View {
                     Divider()
                     compressionOption
                     Divider()
+                    if model.isFolderInput {
+                        Toggle(L.t("Skip symlinks and special files"), isOn: $model.skipSpecialFiles)
+                            .accessibilityIdentifier("encrypt.skipSpecial")
+                    }
                     Toggle(L.t("Hide the file name"), isOn: $model.hideFilename)
                     Toggle(L.t("Password check record"), isOn: $model.enablePasswordCheck)
                         .accessibilityIdentifier("encrypt.passwordCheck")
@@ -174,7 +220,13 @@ struct EncryptView: View {
                 .tint(Design.accent)
             } label: {
                 HStack(spacing: Design.Space.s) {
-                    Text(L.t("Options")).font(.body.weight(.medium))
+                    // L'identificatore sta sulle **foglie**, non sul
+                    // `DisclosureGroup`: su un contenitore sovrascrive quelli dei
+                    // discendenti, e gli interruttori qui dentro finivano tutti
+                    // per chiamarsi "encrypt.options".
+                    Text(L.t("Options"))
+                        .font(.body.weight(.medium))
+                        .accessibilityIdentifier("encrypt.options")
                     Text(optionsSummary)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -183,7 +235,6 @@ struct EncryptView: View {
             }
             .tint(.secondary)
             .foregroundStyle(Color.primary)
-            .accessibilityIdentifier("encrypt.options")
         }
     }
 
@@ -236,17 +287,32 @@ struct EncryptView: View {
         }
     }
 
+    /// Per una cartella si comprime **l'archivio**, non il payload: il TAR è
+    /// già il payload, e comprimerlo due volte lo farebbe solo crescere.
+    @ViewBuilder
     private var compressionOption: some View {
         VStack(alignment: .leading, spacing: Design.Space.s) {
-            Text(L.t("Compression"))
+            Text(model.isFolderInput ? L.t("Archive compression") : L.t("Compression"))
                 .font(.subheadline.weight(.medium))
-            Picker(L.t("Compression"), selection: $model.payloadCompression) {
-                ForEach(PayloadCompression.allCases, id: \.storageValue) { option in
-                    Text(option.label).tag(option)
+
+            if model.isFolderInput {
+                Picker(L.t("Archive compression"), selection: $model.archiveCompression) {
+                    ForEach(ArchiveCompression.allCases, id: \.storageValue) { option in
+                        Text(option.label).tag(option)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("encrypt.archiveCompression")
+            } else {
+                Picker(L.t("Compression"), selection: $model.payloadCompression) {
+                    ForEach(PayloadCompression.allCases, id: \.storageValue) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
             }
-            .pickerStyle(.segmented)
-            Text(L.t("LZMA compresses more and is slower. On already compressed files — photos, video, archives — neither helps."))
+
+            Text(L.t("Stronger compression means a smaller file and a longer wait. On already compressed content — photos, video, archives — none of them helps."))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
