@@ -10,11 +10,12 @@ Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 
 ## Stato
 
-🚧 **M6 completata** — l'app cifra e decifra file **e cartelle**, con
-un'interfaccia propria in inglese e italiano. Provata su iPhone: **un file
-cifrato dal telefono è stato decifrato dall'applicazione desktop**. Il
-round-trip incrociato automatico in CI è il prossimo passo, ed è il gate di
-rilascio (M7).
+🚧 **M7 verde — il gate di rilascio è passato.** Otto file prodotti
+dall'**applicazione desktop 2.0.4** vengono letti dal codice iOS con confronto
+byte per byte, a ogni esecuzione dei test. E un file cifrato dall'iPhone è stato
+decifrato dal desktop, verificato a mano.
+
+L'app cifra e decifra file e cartelle, in inglese e italiano.
 
 La roadmap completa è in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 La specifica di riferimento è in [`SPEC.md`](SPEC.md).
@@ -27,7 +28,7 @@ La specifica di riferimento è in [`SPEC.md`](SPEC.md).
 | M4 — Decrypt | ✅ **79 test verdi, verificata sul simulatore** |
 | M5 — Encrypt file | ✅ **121 test verdi, provata su iPhone; design, impostazioni e localizzazione anticipati da M9** |
 | M6 — Encrypt cartella | ✅ **134 test verdi, con verifica dello spazio** |
-| M7 — Round-trip incrociato (**gate di rilascio**) | ⬜ |
+| M7 — Round-trip incrociato (**gate di rilascio**) | ✅ **149 test verdi; 8 file del desktop letti byte per byte** |
 | M8 — Batch + Audit | ⬜ |
 | M9 — Design system | ⬜ |
 | M10 — Hardening | ⬜ |

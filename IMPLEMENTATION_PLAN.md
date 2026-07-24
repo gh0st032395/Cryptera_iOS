@@ -784,7 +784,7 @@ Conseguenze sul piano:
 |---|---|---|
 | 1 | Lettura delle fixture upstream col plaintext atteso | ✅ confronto byte per byte, con la stessa formula di `tests/format_compat.rs` dell'upstream |
 | 2 | Round-trip locale | ✅ nei test; su device verificato a mano |
-| 3 | **Round-trip incrociato** ⭐ | 🚧 in corso — vedi sotto |
+| 3 | **Round-trip incrociato** ⭐ | ✅ **desktop → iOS automatizzato**; iOS → desktop resta manuale, vedi sotto |
 | 4 | Recupero FEC | ✅ **fatto** |
 | 5 | Manomissione header | ✅ fatto in M3, in entrambe le direzioni |
 
@@ -827,6 +827,31 @@ aveva previsto:
   checklist di rilascio** — già eseguito con successo una volta.
 
 Va detto così nel piano invece di simulare una copertura che non esiste.
+
+#### Punto 3 — esito
+
+**Otto file prodotti dall'applicazione desktop 2.0.4 e congelati**, letti dal
+codice iOS con confronto byte per byte: 11 test verdi al primo colpo. Coprono
+tutti e tre i profili Argon2, i due estremi di `k`/`r`, entrambe le compressioni
+del payload — LZMA2 compresa, che dipende da `liblzma` — il nome nascosto, il
+keyfile, e i tre decoder d'archivio.
+
+Tre asserzioni valgono più delle altre:
+
+- **I parametri dei profili coincidono.** Se una tabella di §5.2 divergesse, i
+  file resterebbero leggibili ma non sarebbero più gli stessi file, e nessun
+  altro test se ne accorgerebbe. I valori attesi sono scritti a mano nel test:
+  leggerli da Rust lo renderebbe d'accordo con un eventuale errore in Rust
+- **Il file con keyfile non si apre senza keyfile.** Senza questa, la prima
+  proverebbe solo che la password funziona
+- **Le tre compressioni d'archivio hanno prodotto payload di dimensione
+  diversa** (575, 532, 903 byte). Se il desktop avesse ignorato la scelta, i tre
+  test d'estrazione sarebbero passati comunque
+
+**Conferma indipendente di una scoperta di M5:** `desktop-nome-nascosto.ecf` ha
+`FLAG_ENC_FILENAME` **spento**. Nascondere il nome non significa cifrarlo,
+significa non memorizzarne alcuno — dedotto dal nostro writer in M5, ora
+confermato dai byte del desktop.
 
 ---
 

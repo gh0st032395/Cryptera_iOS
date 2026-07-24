@@ -90,6 +90,14 @@ targets:
       - path: CrypteraTests/Fixtures
         type: folder
         buildPhase: resources
+      # File prodotti dall'**applicazione desktop** e congelati (M7 punto 3).
+      #
+      # Restano fuori dal bundle dell'app: servono solo ai test, e
+      # `check-release-bundle.sh` fallisce se un `.ecf` finisce in una build
+      # distribuibile.
+      - path: CrypteraTests/CrossFixtures
+        type: folder
+        buildPhase: resources
     dependencies:
       - target: Cryptera
     settings:
