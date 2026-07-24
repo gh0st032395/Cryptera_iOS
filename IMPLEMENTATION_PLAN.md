@@ -778,6 +778,58 @@ Conseguenze sul piano:
 
 ---
 
+### M7 — stato punto per punto (2026-07-24)
+
+| | Punto | Stato |
+|---|---|---|
+| 1 | Lettura delle fixture upstream col plaintext atteso | ✅ confronto byte per byte, con la stessa formula di `tests/format_compat.rs` dell'upstream |
+| 2 | Round-trip locale | ✅ nei test; su device verificato a mano |
+| 3 | **Round-trip incrociato** ⭐ | 🚧 in corso — vedi sotto |
+| 4 | Recupero FEC | ✅ **fatto** |
+| 5 | Manomissione header | ✅ fatto in M3, in entrambe le direzioni |
+
+#### Punto 4 — recupero FEC
+
+Il piano chiedeva "uno shard corrotto → recupero; più di `r` → `CORRUPT_BEYOND_FEC`".
+Si verifica invece il **confine**: esattamente `r` shard si recuperano, `r + 1`
+no. Con un solo shard corrotto un errore nel conteggio delle cancellature
+passerebbe inosservato. L'approccio è portato da `tests/control_and_fec.rs`
+dell'upstream sulla nostra superficie, così a essere verificata è anche la
+mappatura dell'errore che arriva a Swift.
+
+Dal lato applicazione si copre l'altra metà della frase — *«mai un output
+silenziosamente sbagliato»* — con tre asserzioni: un file distrutto non produce
+alcun output, il messaggio che arriva all'utente è presentabile, e **un danno
+contenuto si recupera restituendo i byte originali**. Senza quest'ultima, le
+prime due sarebbero soddisfatte anche da un core che rifiuta qualunque file
+toccato: dimostrerebbero che l'app non sbaglia, non che il recupero funziona.
+
+#### Punto 3 — cosa può davvero essere automatizzato
+
+**L'applicazione desktop non è pilotabile da uno script.** È un'app Tauri il cui
+`tauri.conf.json` dichiara solo i plugin `dialog` e `updater` — niente `cli` — e
+il core `crypto_core_rs` è una libreria senza `[[bin]]`. Non esiste un comando
+da invocare.
+
+Questo rende le due direzioni **asimmetriche**, ed è la cosa che il piano non
+aveva previsto:
+
+- **Desktop → iOS** si automatizza congelando gli output: si producono una volta
+  con l'app vera, si committano, e ogni esecuzione successiva li ridecifra
+  confrontando i byte. Sono artefatti del binario reale e restano validi per
+  sempre. È lo stesso motivo per cui l'upstream committa `tests/fixtures/`.
+  Sorgenti deterministiche e istruzioni sono in `CrypteraTests/CrossFixtures/`.
+- **iOS → desktop** si automatizza **molto meno di quanto sembri**: il percorso
+  di lettura del desktop è `crypto_core_rs`, la stessa libreria allo stesso tag
+  che usiamo noi. Un test che "verifica" i nostri file con quel core
+  confronterebbe il codice con sé stesso. L'unico controllo indipendente è
+  aprire il file con il binario spedito, e resta un **passo manuale della
+  checklist di rilascio** — già eseguito con successo una volta.
+
+Va detto così nel piano invece di simulare una copertura che non esiste.
+
+---
+
 ### M7 — Compatibilità 🚦 gate di rilascio
 
 **Nessun rilascio, nemmeno a se stessi, prima che questa milestone sia verde.**

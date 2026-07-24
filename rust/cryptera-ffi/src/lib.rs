@@ -1364,6 +1364,132 @@ mod tests {
         assert_eq!(meta.filename, "recupero.txt");
     }
 
+    /// SPEC §13.1 punto 4 — **recupero FEC**.
+    ///
+    /// Il piano chiede "corrompere uno shard → recupero ok; corromperne più di
+    /// `r` → `CORRUPT_BEYOND_FEC`". Si verifica il **confine**, che è più
+    /// stringente: esattamente `r` shard devono recuperarsi, `r + 1` no. Con un
+    /// solo shard corrotto un errore nel conteggio delle cancellature passerebbe
+    /// inosservato.
+    ///
+    /// Porta l'approccio di `tests/control_and_fec.rs` dell'upstream sulla
+    /// nostra superficie, così a essere verificata è anche la mappatura
+    /// dell'errore che arriva a Swift.
+    ///
+    /// La cosa che conta più di tutte è l'ultima asserzione: oltre la capacità
+    /// di recupero non deve uscire **un file sbagliato**. Un output silenziosamente
+    /// corrotto è peggio di un errore, perché viene creduto.
+    #[test]
+    fn fec_recupera_esattamente_r_shard_e_non_uno_di_piu() {
+        // Profilo Bassa: k=28, r=4. Si sceglie il `r` più piccolo perché il
+        // test corrompe `r` e `r+1` shard, e con Massima (r=24) sarebbe solo
+        // più lento a parità di significato.
+        const SHARD_SIZE: u64 = 16 * 1024; // default del core
+        const STRIDE: u64 = 8 + SHARD_SIZE + 16; // due CRC + ciphertext + tag GCM
+
+        let dir = tempfile::tempdir().unwrap();
+        let plain = dir.path().join("dati.bin");
+        let contenuto: Vec<u8> = (0..200_000).map(|i| ((i * 7 + 13) % 251) as u8).collect();
+        std::fs::write(&plain, &contenuto).unwrap();
+        let encrypted = dir.path().join("dati.ecf");
+
+        let meta = encrypt(
+            EncryptRequest {
+                source: InputSource::File {
+                    path: plain.to_string_lossy().to_string(),
+                },
+                output_path: encrypted.to_string_lossy().to_string(),
+                password: "p".into(),
+                keyfile_path: None,
+                // Nessuna compressione: la posizione degli shard deve essere
+                // calcolabile, e un payload compresso ne cambierebbe il numero.
+                payload_compression: PayloadCompression::None,
+                archive_compression: ArchiveCompression::None,
+                skip_special_files: false,
+                // Senza record PWCHK gli shard iniziano subito dopo l'header.
+                enable_password_check: false,
+                hide_filename: false,
+                security_profile: SecurityProfile::Standard,
+                integrity_profile: IntegrityProfile::Low,
+            },
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!((meta.k, meta.r), (28, 4), "profilo Bassa (SPEC §5.2)");
+        assert_eq!(meta.shard_size, SHARD_SIZE as u32);
+
+        let pristine = std::fs::read(&encrypted).unwrap();
+        // magic(4) + hdr_len(2) + Header Body + hdr_crc(4) + auth tag(16).
+        let hdr_len = u16::from_be_bytes([pristine[4], pristine[5]]) as u64;
+        let offset = 4 + 2 + hdr_len + 4 + 16;
+
+        // Si colpisce il ciphertext, non i CRC iniziali: il tag GCM non torna
+        // più e lo shard viene trattato come cancellatura, che è esattamente il
+        // caso che Reed-Solomon deve saper coprire.
+        let corrompi = |quanti: u64| -> Vec<u8> {
+            let mut bytes = pristine.clone();
+            for shard in 0..quanti {
+                let pos = (offset + shard * STRIDE + 8 + 100) as usize;
+                for b in &mut bytes[pos..pos + 32] {
+                    *b ^= 0xFF;
+                }
+            }
+            bytes
+        };
+
+        // ─── r shard corrotti: si recupera, e il contenuto è identico ───
+        let recuperabile = dir.path().join("recuperabile.ecf");
+        std::fs::write(&recuperabile, corrompi(u64::from(meta.r))).unwrap();
+        let ripristinato = dir.path().join("ripristinato.bin");
+        decrypt(
+            DecryptRequest {
+                input_path: recuperabile.to_string_lossy().to_string(),
+                output_path: ripristinato.to_string_lossy().to_string(),
+                password: "p".into(),
+                keyfile_path: None,
+                extract_archive: false,
+                keep_archive: false,
+            },
+            None,
+            None,
+        )
+        .expect("con r shard corrotti il file deve essere recuperabile");
+        assert_eq!(
+            std::fs::read(&ripristinato).unwrap(),
+            contenuto,
+            "il recupero deve restituire i byte originali, non un'approssimazione"
+        );
+
+        // ─── r + 1: oltre la capacità di recupero ───
+        let oltre = dir.path().join("oltre.ecf");
+        std::fs::write(&oltre, corrompi(u64::from(meta.r) + 1)).unwrap();
+        let fallito = dir.path().join("fallito.bin");
+        let r = decrypt(
+            DecryptRequest {
+                input_path: oltre.to_string_lossy().to_string(),
+                output_path: fallito.to_string_lossy().to_string(),
+                password: "p".into(),
+                keyfile_path: None,
+                extract_archive: false,
+                keep_archive: false,
+            },
+            None,
+            None,
+        );
+
+        assert!(
+            matches!(r, Err(CrypteraError::CorruptBeyondFec)),
+            "atteso CORRUPT_BEYOND_FEC, ottenuto {r:?}"
+        );
+        assert!(
+            !fallito.exists(),
+            "oltre la capacità di recupero non deve restare un file: \
+             un output silenziosamente sbagliato è peggio di un errore"
+        );
+    }
+
     /// Manomettere il tag di autenticazione in **entrambe** le copie
     /// dell'header dà `HEADER_AUTH_FAILED`.
     ///
