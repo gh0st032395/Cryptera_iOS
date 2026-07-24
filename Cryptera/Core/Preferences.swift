@@ -24,6 +24,36 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .dark: return .dark
         }
     }
+
+    var interfaceStyle: UIUserInterfaceStyle {
+        switch self {
+        case .system: return .unspecified
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+
+    /// Applica il tema alle finestre dell'app.
+    ///
+    /// `.preferredColorScheme` da solo **non basta**: la barra delle schede è
+    /// UIKit sotto SwiftUI, e resta con l'aspetto precedente finché qualcosa non
+    /// la costringe a ridisegnarsi — toccandola, per esempio. Il risultato è
+    /// un'app metà chiara e metà scura fino al primo tocco.
+    ///
+    /// Scrivere `overrideUserInterfaceStyle` sulla finestra aggiorna invece
+    /// **tutto** ciò che vi è contenuto, chrome di sistema compresa, subito.
+    ///
+    /// L'alternativa sarebbe ricostruire l'albero come si fa per la lingua, ma
+    /// cambiare tema butterebbe via il file scelto e la password digitata: una
+    /// preferenza di aspetto non deve costare il lavoro in corso.
+    func apply() {
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows {
+                window.overrideUserInterfaceStyle = interfaceStyle
+            }
+        }
+    }
 }
 
 /// Chiavi di `UserDefaults` usate dall'app.

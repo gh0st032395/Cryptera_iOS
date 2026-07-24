@@ -194,6 +194,31 @@ final class DecryptModel {
         }
     }
 
+    /// C'è qualcosa da azzerare?
+    var hasWorkInProgress: Bool {
+        input != nil || keyfile != nil || !password.isEmpty
+            || output != nil || errorMessage != nil || headerProblem != nil
+    }
+
+    /// Riporta la schermata allo stato iniziale.
+    ///
+    /// Scarta anche la copia in chiaro, che è la ragione principale per cui
+    /// questo comando esiste: dopo aver finito, non si vuole lasciare in giro un
+    /// file decifrato solo perché si è cambiato schermata.
+    func reset() {
+        discardWork()
+        if let previous = input {
+            FileAccess.discardIfInbox(previous.url)
+        }
+        input = nil
+        header = nil
+        headerProblem = nil
+        keyfile = nil
+        password = ""
+        errorMessage = nil
+        extractArchive = false
+    }
+
     /// Da chiamare quando l'utente ha salvato o ha chiuso il risultato.
     ///
     /// L'output è **in chiaro**: appena non serve più va via dal disco.

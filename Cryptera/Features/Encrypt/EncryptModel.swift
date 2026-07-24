@@ -247,6 +247,33 @@ final class EncryptModel {
         }
     }
 
+    /// C'è qualcosa da azzerare?
+    var hasWorkInProgress: Bool {
+        input != nil || keyfile != nil || !password.isEmpty
+            || !passwordConfirmation.isEmpty || output != nil || errorMessage != nil
+    }
+
+    /// Riporta la schermata allo stato iniziale.
+    ///
+    /// Le opzioni tornano ai predefiniti delle impostazioni, non a quelli di
+    /// serie: "da capo" significa il punto da cui si parte di solito, non un
+    /// punto che l'utente non ha mai scelto.
+    func reset() {
+        discardWork()
+        input = nil
+        keyfile = nil
+        password = ""
+        passwordConfirmation = ""
+        errorMessage = nil
+        hideFilename = false
+        enablePasswordCheck = true
+
+        let defaults = EncryptionDefaults.current
+        payloadCompression = defaults.payloadCompression
+        securityProfile = defaults.securityProfile
+        integrityProfile = defaults.integrityProfile
+    }
+
     /// L'output cifrato non contiene segreti in chiaro, ma occupa spazio e non
     /// serve più una volta salvato.
     func discardWork() {

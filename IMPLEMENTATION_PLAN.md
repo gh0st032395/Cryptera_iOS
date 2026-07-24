@@ -626,6 +626,28 @@ binario, non da una costante riscritta a mano.
 - **Un identificatore su un contenitore si propaga ai discendenti**, e la
   ricerca ne trovava più d'uno: va sul controllo vero
 
+#### Segnalazioni dall'uso su iPhone (2026-07-24)
+
+**1. Cambiando tema la barra delle schede restava indietro** finché non la si
+toccava: l'app appariva metà chiara e metà scura. `.preferredColorScheme` agisce
+sull'albero SwiftUI, ma la barra è **UIKit** e non si ridisegna finché qualcosa
+non la costringe. Si scrive quindi `overrideUserInterfaceStyle` sulla finestra,
+che aggiorna subito tutto ciò che vi è contenuto, chrome di sistema compresa.
+
+Ricostruire l'albero come si fa per la lingua avrebbe funzionato, ma cambiare
+tema avrebbe buttato via il file scelto e la password digitata: una preferenza
+di aspetto non deve costare il lavoro in corso.
+
+**2. Aggiunto il ripristino** su Cifra, Decifra e Verifica — nella barra di
+navigazione, perché agisce sulla schermata intera. Su Decifra scarta anche la
+**copia in chiaro**, che è la ragione principale per cui serve: dopo aver
+finito non si vuole lasciare in giro un file decifrato solo perché si è cambiato
+schermata. Chiede conferma **solo** quando c'è davvero un file non ancora
+salvato da perdere; chiederla sempre la renderebbe un riflesso.
+
+Resta visibile ma spento quando non c'è nulla da azzerare: un pulsante che
+appare e sparisce è più difficile da ritrovare di uno sempre nello stesso posto.
+
 #### Due trappole nei test, che valgono per il seguito
 
 - **La lingua del simulatore rendeva i test non deterministici**: verdi su una
@@ -638,7 +660,11 @@ binario, non da una costante riscritta a mano.
   usarlo, e raggiunge le schede per posizione
 - Le impostazioni **sopravvivono fra un'esecuzione e l'altra** nel contenitore
   dell'app: un test che ne legge una deve prima azzerarla, o diventa verde o
-  rosso a seconda di cosa è girato prima
+  rosso a seconda di cosa è girato prima. È già successo due volte — sui
+  predefiniti di cifratura e sul tema — e la seconda ha fatto sembrare rotta una
+  correzione che funzionava. Quando la preferenza è anche quella che il test
+  cambia, l'argomento di lancio **non** è la soluzione: ha la precedenza sulle
+  scritture, quindi lo stato noto va stabilito passando dalla UI
 
 #### Rinviato
 
@@ -672,6 +698,25 @@ attivo.
 nel caso peggiore serve ~2× la sorgente (TAR intermedio + output) più
 l'overhead di parità, fino al 300% con profilo `Max`. Fallire subito con
 `INSUFFICIENT_STORAGE`, non a metà operazione.
+
+---
+
+### Prova su device reale e round-trip col desktop (2026-07-24)
+
+**Riuscite entrambe, riferite dall'utente.** L'app gira su iPhone fisico, e un
+file cifrato dal telefono è stato **decifrato dall'applicazione desktop**.
+
+Conseguenze sul piano:
+
+1. **La riserva di M2 è sciolta.** Il criterio della spec diceva "su device
+   reale" e fino a qui era verificato solo su simulatore.
+2. **La decisione D4 è di fatto risolta**: l'installazione su device è avvenuta,
+   quindi M10 (test memoria sotto Instruments) e M11 non sono più bloccate.
+3. **M7 punto 3 ha una prima conferma manuale.** È il punto che il piano indica
+   come *l'unico test che dimostra davvero la compatibilità*. Resta però da
+   fare come **test automatico in CI**, nelle due direzioni: una prova manuale
+   riuscita non impedisce a una modifica futura di rompere il formato senza che
+   nessuno se ne accorga. M7 resta il gate di rilascio.
 
 ---
 

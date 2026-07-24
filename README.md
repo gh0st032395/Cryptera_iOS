@@ -11,7 +11,9 @@ Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 ## Stato
 
 🚧 **M5 completata** — l'app cifra e decifra file singoli, con un'interfaccia
-propria in inglese e italiano. La cifratura di cartelle arriva in M6.
+propria in inglese e italiano. Provata su iPhone: **un file cifrato dal telefono
+è stato decifrato dall'applicazione desktop**. Il round-trip incrociato
+automatico in CI resta il gate di M7. La cifratura di cartelle arriva in M6.
 
 La roadmap completa è in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 La specifica di riferimento è in [`SPEC.md`](SPEC.md).
@@ -22,7 +24,7 @@ La specifica di riferimento è in [`SPEC.md`](SPEC.md).
 | M2 — XCFramework | ✅ **app verde su simulatore** |
 | M3 — Primo end-to-end (`verify`) | ✅ **48 test verdi, revisionata** |
 | M4 — Decrypt | ✅ **79 test verdi, verificata sul simulatore** |
-| M5 — Encrypt file | ✅ **117 test verdi, con design, impostazioni e localizzazione anticipati da M9** |
+| M5 — Encrypt file | ✅ **121 test verdi, provata su iPhone; design, impostazioni e localizzazione anticipati da M9** |
 | M6 — Encrypt cartella | ⬜ |
 | M7 — Round-trip incrociato (**gate di rilascio**) | ⬜ |
 | M8 — Batch + Audit | ⬜ |

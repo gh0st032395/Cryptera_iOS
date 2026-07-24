@@ -38,6 +38,18 @@ struct EncryptView: View {
                 }
             }
             .navigationTitle(L.t("Encrypt"))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ResetButton(
+                        enabled: model.hasWorkInProgress && !model.isRunning,
+                        confirmationMessage: model.output == nil ? nil
+                            : L.t("The encrypted file has not been saved yet. It will be deleted."),
+                        identifier: "encrypt.reset"
+                    ) {
+                        model.reset()
+                    }
+                }
+            }
         }
         .task(id: router.pendingEncryptInput) {
             guard let pending = router.pendingEncryptInput else { return }

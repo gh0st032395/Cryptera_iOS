@@ -28,6 +28,20 @@ struct DecryptView: View {
                 }
             }
             .navigationTitle(L.t("Decrypt"))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ResetButton(
+                        enabled: model.hasWorkInProgress && !model.isRunning,
+                        // La conferma compare solo quando c'è davvero un file da
+                        // perdere: chiederla sempre la renderebbe un riflesso.
+                        confirmationMessage: model.output == nil ? nil
+                            : L.t("The decrypted file has not been saved yet. It will be deleted."),
+                        identifier: "decrypt.reset"
+                    ) {
+                        model.reset()
+                    }
+                }
+            }
         }
         // `task(id:)` e non `onChange`: deve scattare anche quando il file è già
         // presente alla prima comparsa, cioè quando è l'apertura di un `.ecf` ad

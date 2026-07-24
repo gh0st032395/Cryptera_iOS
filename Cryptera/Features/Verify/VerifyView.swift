@@ -21,6 +21,16 @@ struct VerifyView: View {
                 if let outcome = model.outcome { outcomeCard(outcome) }
             }
             .navigationTitle(L.t("Verify"))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ResetButton(
+                        enabled: model.hasWorkInProgress && !model.isRunning,
+                        identifier: "verify.reset"
+                    ) {
+                        model.reset()
+                    }
+                }
+            }
         }
         // ⚠️ I due `.fileImporter` stanno ciascuno sulla card che lo apre, non
         // qui: due modificatori di presentazione dello stesso tipo sulla stessa
@@ -162,6 +172,21 @@ final class VerifyModel {
 
     func clearKeyfile() {
         keyfile = nil
+    }
+
+    /// C'è qualcosa da azzerare?
+    var hasWorkInProgress: Bool {
+        input != nil || keyfile != nil || !password.isEmpty || outcome != nil
+    }
+
+    /// Riporta la schermata allo stato iniziale. La verifica non produce file,
+    /// quindi non c'è nulla da cancellare dal disco.
+    func reset() {
+        input = nil
+        keyfile = nil
+        password = ""
+        outcome = nil
+        progress = nil
     }
 
     func cancel() {

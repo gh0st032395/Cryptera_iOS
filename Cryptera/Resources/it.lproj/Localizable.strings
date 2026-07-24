@@ -174,3 +174,11 @@
 "App version" = "Versione app";
 "Core" = "Core";
 "Cryptera works entirely on this device. It makes no network requests and collects nothing." = "Cryptera lavora interamente su questo dispositivo. Non effettua richieste di rete e non raccoglie nulla.";
+
+// MARK: - Ripristino
+
+"Start over" = "Ricomincia";
+"Start over?" = "Ricominciare?";
+"Discard and start over" = "Scarta e ricomincia";
+"The decrypted file has not been saved yet. It will be deleted." = "Il file decifrato non è ancora stato salvato. Verrà eliminato.";
+"The encrypted file has not been saved yet. It will be deleted." = "Il file cifrato non è ancora stato salvato. Verrà eliminato.";

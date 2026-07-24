@@ -70,7 +70,12 @@ struct RootView: View {
         // Il verde di Cryptera diventa il colore delle azioni in tutta l'app,
         // barra delle tab compresa.
         .tint(Design.accent)
-        .preferredColorScheme(AppTheme(rawValue: theme)?.colorScheme)
+        // Il tema si applica alla finestra, non solo all'albero SwiftUI: la
+        // barra delle schede è UIKit e con il solo `preferredColorScheme`
+        // resterebbe con l'aspetto precedente fino al primo tocco.
+        .onChange(of: theme, initial: true) {
+            AppTheme(rawValue: theme)?.apply()
+        }
         // Le stringhe si risolvono con `L.t(...)`, che legge la lingua scelta al
         // momento della chiamata: cambiarla non invaliderebbe da sola alcuna
         // vista. Ricostruire l'albero è il modo diretto per farlo — succede una

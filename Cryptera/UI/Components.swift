@@ -371,6 +371,48 @@ struct PrimaryButton: View {
     }
 }
 
+/// Riporta una schermata allo stato iniziale.
+///
+/// Sta nella barra di navigazione perché è un'azione sulla schermata intera, non
+/// su una delle sue sezioni. Resta visibile ma disattivata quando non c'è nulla
+/// da azzerare: un pulsante che appare e sparisce è più difficile da ritrovare
+/// di uno che è sempre nello stesso posto.
+struct ResetButton: View {
+    let enabled: Bool
+    /// Se presente, si chiede conferma prima di procedere. Serve quando il
+    /// ripristino **cancella un file** che l'utente non ha ancora salvato.
+    var confirmationMessage: String?
+    var identifier: String
+    let action: () -> Void
+
+    @State private var confirming = false
+
+    var body: some View {
+        Button {
+            if confirmationMessage != nil {
+                confirming = true
+            } else {
+                action()
+            }
+        } label: {
+            Image(systemName: "arrow.counterclockwise")
+        }
+        .disabled(!enabled)
+        .accessibilityLabel(L.t("Start over"))
+        .accessibilityIdentifier(identifier)
+        .confirmationDialog(
+            L.t("Start over?"),
+            isPresented: $confirming,
+            titleVisibility: .visible
+        ) {
+            Button(L.t("Discard and start over"), role: .destructive, action: action)
+            Button(L.t("Cancel"), role: .cancel) {}
+        } message: {
+            Text(confirmationMessage ?? "")
+        }
+    }
+}
+
 /// Stato di un'operazione in corso, con pausa e annullamento.
 struct RunningPanel: View {
     let progress: OperationProgress?
