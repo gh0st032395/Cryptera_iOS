@@ -440,7 +440,120 @@ non li richiede. Vanno affrontati quando si vorrà l'uso ripetuto fluido.
 
 ---
 
-### M5 — Encrypt file
+### M5 — Encrypt file ✅ COMPLETATA (2026-07-24)
+
+**Exit raggiunto:** si sceglie un file, si cifra e si salva. **99 test verdi** —
+39 Rust, 53 XCTest, 7 UI test. Il round-trip fra le due schermate (cifra con
+Encrypt, ridecifra con Decrypt, confronta il contenuto) è un test.
+
+Realizzato: `PasswordStrength` portato dall'upstream, `EncryptModel`,
+`EncryptView`, pausa dell'operazione, avviso di irreversibilità, e un **design
+system** applicato a tutte e tre le schermate.
+
+#### Anticipato da M9: il design
+
+Richiesto esplicitamente in corso d'opera. Non è M9 completa — mancano tema
+selezionabile, i18n, verifica Dynamic Type e VoiceOver — ma la base c'è e le
+schermate future la ereditano invece di doverla retrofittare.
+
+- **Dal desktop si prendono i colori, non la forma.** Il verde `--accent`
+  (`#1AAB82` chiaro, `#35D0A1` scuro) resta l'identità di Cryptera; la finestra
+  con titlebar custom e pannelli in vetro no — è pensata per un mouse su uno
+  schermo grande
+- **Card al posto di `Form`.** SPEC §8.4 indica `Form`/`insetGrouped`, che però
+  danno a ogni schermata l'aria di un pannello di Impostazioni. La struttura
+  resta nativa — contenuto scorrevole, superfici e colori semantici, che
+  seguono da soli chiaro/scuro e contrasto elevato — con spaziature e gerarchia
+  decise da noi
+- Componenti condivisi in `UI/Components.swift`: card, riga file, campo password
+  con visibilità, barra di robustezza, riga metadato, avviso, pulsante
+  principale, pannello di esecuzione
+
+**Tre difetti trovati guardando l'app, non i test:**
+
+1. **Sotto il contenuto restava un'area bianca.** Lo sfondo era applicato alla
+   `ScrollView`, che copre solo l'area del contenuto: appena si scorreva oltre
+   la fine compariva il bianco della finestra. Ora sta dietro, e ignora le safe
+   area
+2. **Il tint grigio dell'intestazione "Opzioni" si propagava ai controlli
+   interni**, spegnendo interruttori e segmenti — un toggle attivo appariva
+   grigio, cioè sembrava spento
+3. Pulsante disattivato troppo pesante e icona dell'occhio in verde, che
+   competeva con l'azione principale
+
+> Nota utile: nelle catture il contenuto dei `SecureField` **non compare**. Non
+> è un difetto — è la protezione dalla cattura schermo di SPEC §12.3, vista
+> funzionare.
+
+#### Due comportamenti del desktop che vanno replicati, non ammorbiditi
+
+**1. La policy password blocca, non avvisa.** `operations.js` esce da
+`handleEncrypt` senza cifrare se la password non ha almeno 10 caratteri e
+livello ≥ 2. Qui fa lo stesso: il pulsante resta spento e il motivo è scritto
+accanto. Un limite che si può ignorare non è un limite, e la differenza fra le
+due piattaforme sarebbe silenziosa.
+
+**2. L'avviso di irreversibilità si mostra una volta sola.** Come il flag in
+`localStorage` del desktop. Ripeterlo a ogni cifratura lo trasformerebbe in un
+ostacolo da chiudere senza leggere.
+
+#### Il port della robustezza password ha due trappole
+
+Sembra una funzione da ricopiare, e non lo è del tutto:
+
+- **Le classi di caratteri delle regex sono solo ASCII.** `isUppercase` di Swift
+  è vera per "À" e `isNumber` per le cifre arabo-indiane, che il desktop non
+  conta. Usare le proprietà Unicode darebbe un giudizio diverso sulla stessa
+  password
+- **La lunghezza è quella di JavaScript, in unità UTF-16.** Con `String.count`
+  un'emoji varrebbe 1 invece di 2 — e siccome la lunghezza **blocca** la
+  cifratura, una password accettata dal desktop verrebbe rifiutata qui
+
+Vive in Swift e non in Rust perché non determina il *contenuto* del file: la
+regola di SPEC §2.2 riguarda ciò che finisce nel formato.
+
+#### La "stima del tempo" di §8.2 non è scrivibile in secondi
+
+Un tempo in secondi dipende dal dispositivo e nessuna misura è disponibile prima
+di eseguire l'operazione: sarebbe un numero inventato. Si espone invece
+`security_profile_params` da Rust e si mostra ciò che è **derivato e
+verificabile** — memoria esatta, numero di passaggi, e il rapporto di lavoro
+rispetto al profilo Standard (`t·m`). L'avviso memoria di §11.2 resta esatto e
+blocca l'operazione.
+
+La dimensione finale stimata usa l'overhead di parità di Rust. È dichiarata
+approssimata: ignora header e trailer e **non può tenere conto della
+compressione**, il cui effetto dipende dal contenuto — con la compressione
+attiva il file reale è più piccolo, mai più grande.
+
+#### Altre scelte
+
+- **`k`/`r` non si mostrano più grezzi** in Decrypt e Verify: "2 blocchi ogni 4"
+  invece di "k 4 / r 2". Il rapporto è il vocabolario del formato, non quello di
+  chi sta guardando se il suo file è a posto
+- **Pausa** finalmente collegata (`CancelToken.set_paused`, esposto da M3 e mai
+  usato) su tutte e tre le operazioni — era il debito rinviato da M4
+- **Aggancio `-cifra-fixture`** simmetrico a quello di M4, per la stessa ragione:
+  il `.fileImporter` è fuori processo e non è pilotabile
+- **Le password vengono azzerate a operazione conclusa.** Non è la zeroizzazione
+  che SPEC §12.1 dichiara onestamente impossibile in Swift: è ridurne la vita,
+  che è quanto si può fare
+- I UI test cercano per identificatore **senza vincolare il tipo**: lo stesso
+  elemento diventa `staticText` o `otherElement` a seconda che contenga un
+  pulsante, e legarli al tipo li farebbe fallire a ogni ritocco della vista
+
+#### Rinviato
+
+| Cosa | Dove |
+|---|---|
+| Cifratura di cartelle, TAR, verifica dello spazio | M6 |
+| Tema selezionabile, i18n, Dynamic Type e VoiceOver verificati | M9 |
+| Preflight memoria in **decifratura** (parametri dall'header) | M10 |
+| Prova su device reale | bloccata da **D4** |
+
+---
+
+### M5 — dettaglio originale del piano
 
 Opzioni, progress, pausa/annulla. Punti che la UI deve rendere espliciti:
 

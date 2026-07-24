@@ -2,81 +2,122 @@ import SwiftUI
 
 /// Schermata Verify (SPEC §8.3): controlla l'integrità senza scrivere nulla.
 ///
-/// Prima di M4 leggeva una fixture del bundle, perché il document picker non
-/// esisteva ancora. Ora l'input arriva dallo stesso `.fileImporter` di Decrypt,
-/// e lo scaffolding di M3 — `BundledFixture` e il picker delle fixture — è
-/// stato rimosso.
+/// È l'operazione da usare quando si vuole sapere se un archivio è ancora sano
+/// senza produrne una copia in chiaro — utile su un backup, dove il file
+/// decifrato non serve e sarebbe solo un rischio in più.
 struct VerifyView: View {
     @State private var model = VerifyModel()
     @State private var choosingInput = false
+    @State private var choosingKeyfile = false
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("File cifrato") {
-                    Button("Scegli un file .ecf") { choosingInput = true }
-                        .accessibilityIdentifier("verify.chooseInput")
-
-                    if let input = model.input {
-                        LabeledContent("File", value: input.lastPathComponent)
-                            .accessibilityIdentifier("verify.input")
-                    }
-                }
-
+            ScreenScroll {
+                inputCard
                 if model.input != nil {
-                    Section("Password") {
-                        SecureField("Password", text: $model.password)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .accessibilityIdentifier("verify.password")
-                    }
-
-                    Section {
-                        if model.isRunning {
-                            HStack {
-                                if let fraction = model.progress?.fraction {
-                                    ProgressView(value: fraction) {
-                                        Text(model.progress?.stage.displayName ?? "")
-                                    }
-                                } else {
-                                    ProgressView { Text(model.progress?.stage.displayName ?? "") }
-                                }
-                                Spacer()
-                                Button("Annulla", role: .destructive) { model.cancel() }
-                                    .buttonStyle(.borderless)
-                            }
-                        } else {
-                            Button("Verifica") { Task { await model.run() } }
-                                .disabled(!model.canRun)
-                                .accessibilityIdentifier("verify.run")
-                        }
-                    }
+                    passwordCard
+                    actionCard
                 }
-
-                if let outcome = model.outcome {
-                    Section("Risultato") {
-                        switch outcome {
-                        case .success(let meta):
-                            LabeledContent("Esito", value: "integro")
-                                .accessibilityIdentifier("verify.outcome.success")
-                            LabeledContent("Formato", value: "ECF1 v\(meta.version)")
-                            LabeledContent("Dimensione", value: SizeFormatter.string(meta.plainSize))
-                            LabeledContent("Ridondanza", value: "k \(meta.k) / r \(meta.r)")
-                        case .failure(let message):
-                            Text(message)
-                                .foregroundStyle(.red)
-                                .accessibilityIdentifier("verify.outcome.failure")
-                        }
-                    }
-                }
+                if let outcome = model.outcome { outcomeCard(outcome) }
             }
             .navigationTitle("Verifica")
         }
-        .fileImporter(
-            isPresented: $choosingInput,
-            allowedContentTypes: [.crypteraECF]
-        ) { result in
+        .fileImporter(isPresented: $choosingInput, allowedContentTypes: [.crypteraECF]) { result in
             if case .success(let url) = result { model.select(url) }
+        }
+        .fileImporter(isPresented: $choosingKeyfile, allowedContentTypes: [.item]) { result in
+            if case .success(let url) = result { model.selectKeyfile(url) }
+        }
+    }
+
+    private var inputCard: some View {
+        Card(title: "File cifrato", footnote: "La verifica non scrive nulla su disco.") {
+            if let input = model.input {
+                FileTile(
+                    name: input.lastPathComponent,
+                    systemImage: "lock.doc",
+                    changeTitle: "Cambia",
+                    onChange: { choosingInput = true }
+                )
+                .accessibilityIdentifier("verify.input")
+            } else {
+                FilePlaceholder(
+                    title: "Scegli un file .ecf",
+                    subtitle: "Ne controlla l'integrità senza decifrarlo su disco",
+                    systemImage: "checkmark.shield",
+                    action: { choosingInput = true }
+                )
+                .accessibilityIdentifier("verify.chooseInput")
+            }
+        }
+    }
+
+    private var passwordCard: some View {
+        Card(title: "Password") {
+            SecretField(title: "Password", text: $model.password, identifier: "verify.password")
+
+            Divider()
+
+            if let keyfile = model.keyfile {
+                FileTile(
+                    name: keyfile.lastPathComponent,
+                    detail: "Keyfile",
+                    systemImage: "key",
+                    tint: Design.info,
+                    changeTitle: "Rimuovi",
+                    onChange: { model.clearKeyfile() }
+                )
+            } else {
+                Button("Aggiungi un keyfile") { choosingKeyfile = true }
+                    .font(.subheadline.weight(.medium))
+            }
+        }
+    }
+
+    private var actionCard: some View {
+        Card {
+            if model.isRunning {
+                RunningPanel(
+                    progress: model.progress,
+                    paused: model.isPaused,
+                    onPause: { model.togglePause() },
+                    onCancel: { model.cancel() },
+                    identifierPrefix: "verify"
+                )
+            } else {
+                PrimaryButton(
+                    title: "Verifica",
+                    systemImage: "checkmark.shield",
+                    enabled: model.canRun,
+                    identifier: "verify.run"
+                ) {
+                    Task { await model.run() }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func outcomeCard(_ outcome: VerifyModel.Outcome) -> some View {
+        switch outcome {
+        case .success(let meta):
+            Card(title: "Risultato") {
+                Notice(
+                    kind: .success,
+                    text: "Il file è integro e la password è corretta.",
+                    identifier: "verify.outcome.success"
+                )
+                MetadataRow(label: "Formato", value: "ECF1 v\(meta.version)", monospaced: true)
+                MetadataRow(label: "Dimensione", value: SizeFormatter.string(meta.plainSize))
+                MetadataRow(
+                    label: "Recupero",
+                    value: "\(meta.r) blocchi ogni \(meta.k)"
+                )
+            }
+        case .failure(let message):
+            Card(title: "Risultato") {
+                Notice(kind: .danger, text: message, identifier: "verify.outcome.failure")
+            }
         }
     }
 }
@@ -93,9 +134,11 @@ final class VerifyModel {
 
     private(set) var input: URL?
     var password = ""
+    private(set) var keyfile: URL?
     private(set) var progress: OperationProgress?
     private(set) var outcome: Outcome?
     private(set) var isRunning = false
+    private(set) var isPaused = false
 
     private var token: CancelToken?
 
@@ -105,11 +148,26 @@ final class VerifyModel {
         input = url
         outcome = nil
         progress = nil
+        // La password digitata per il file precedente non deve restare pronta
+        // da inviare per un file diverso.
         password = ""
+    }
+
+    func selectKeyfile(_ url: URL) {
+        keyfile = url
+    }
+
+    func clearKeyfile() {
+        keyfile = nil
     }
 
     func cancel() {
         token?.cancel()
+    }
+
+    func togglePause() {
+        isPaused.toggle()
+        token?.setPaused(paused: isPaused)
     }
 
     func run() async {
@@ -118,19 +176,29 @@ final class VerifyModel {
         let token = CancelToken()
         self.token = token
         isRunning = true
+        isPaused = false
         outcome = nil
         progress = nil
         defer {
             isRunning = false
+            isPaused = false
             self.token = nil
         }
 
         let password = password
+        let keyfileURL = keyfile
 
         do {
-            let meta = try await FileAccess.withSecurityScope(input) { path in
+            let meta = try await FileAccess.withSecurityScope(
+                input: input,
+                keyfile: keyfileURL
+            ) { inputPath, keyfilePath in
                 try await CrypteraEngine.shared.verify(
-                    VerifyRequest(inputPath: path, password: password, keyfilePath: nil),
+                    VerifyRequest(
+                        inputPath: inputPath,
+                        password: password,
+                        keyfilePath: keyfilePath
+                    ),
                     token: token,
                     onProgress: { [weak self] update in
                         // Il callback arriva da un thread Rust: hop sul main

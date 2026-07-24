@@ -19,16 +19,25 @@ struct PendingInput: Equatable, Identifiable {
 @Observable
 final class AppRouter {
     enum Tab: Hashable {
+        case encrypt
         case decrypt
         case verify
     }
 
     var tab: Tab = .decrypt
     private(set) var pendingInput: PendingInput?
+    private(set) var pendingEncryptInput: PendingInput?
 
     func open(_ url: URL) {
         pendingInput = PendingInput(url: url)
         tab = .decrypt
+    }
+
+    /// Solo per i UI test (vedi `LaunchArguments`): niente, nell'app, consegna
+    /// un file alla schermata Cifra dall'esterno.
+    func openForEncryption(_ url: URL) {
+        pendingEncryptInput = PendingInput(url: url)
+        tab = .encrypt
     }
 }
 
@@ -42,6 +51,10 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: $router.tab) {
+            EncryptView(router: router)
+                .tabItem { Label("Cifra", systemImage: "lock") }
+                .tag(AppRouter.Tab.encrypt)
+
             DecryptView(router: router)
                 .tabItem { Label("Decifra", systemImage: "lock.open") }
                 .tag(AppRouter.Tab.decrypt)
@@ -50,6 +63,9 @@ struct RootView: View {
                 .tabItem { Label("Verifica", systemImage: "checkmark.shield") }
                 .tag(AppRouter.Tab.verify)
         }
+        // Il verde di Cryptera diventa il colore delle azioni in tutta l'app,
+        // barra delle tab compresa.
+        .tint(Design.accent)
         .onOpenURL { router.open($0) }
         .task {
             // Prima di qualunque operazione: un output decifrato di una sessione
@@ -58,6 +74,7 @@ struct RootView: View {
             await CrypteraEngine.shared.configureIfNeeded()
             #if DEBUG
             if let url = LaunchArguments.fixtureToOpen() { router.open(url) }
+            if let url = LaunchArguments.fixtureToEncrypt() { router.openForEncryption(url) }
             #endif
         }
     }
@@ -76,10 +93,17 @@ struct RootView: View {
 /// escluse da `project.yml` e questo codice non viene nemmeno compilato.
 enum LaunchArguments {
     static let openFixture = "-apri-fixture"
+    /// Consegna una fixture alla schermata Cifra. Vale come file qualsiasi: a
+    /// cifrare, un `.ecf` è un file come un altro.
+    static let encryptFixture = "-cifra-fixture"
 
-    static func fixtureToOpen() -> URL? {
+    static func fixtureToOpen() -> URL? { fixture(after: openFixture) }
+
+    static func fixtureToEncrypt() -> URL? { fixture(after: encryptFixture) }
+
+    private static func fixture(after flag: String) -> URL? {
         let arguments = ProcessInfo.processInfo.arguments
-        guard let index = arguments.firstIndex(of: openFixture),
+        guard let index = arguments.firstIndex(of: flag),
               index + 1 < arguments.count else { return nil }
         return Bundle.main.url(
             forResource: arguments[index + 1],

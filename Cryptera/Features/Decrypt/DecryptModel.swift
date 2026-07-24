@@ -49,6 +49,7 @@ final class DecryptModel {
 
     // ─── Esecuzione ────────────────────────────────────────────────
     private(set) var isRunning = false
+    private(set) var isPaused = false
     private(set) var progress: OperationProgress?
     private(set) var errorMessage: String?
     private(set) var output: Output?
@@ -108,6 +109,12 @@ final class DecryptModel {
         token?.cancel()
     }
 
+    /// Pausa e ripresa passano dallo stesso token della cancellazione.
+    func togglePause() {
+        isPaused.toggle()
+        token?.setPaused(paused: isPaused)
+    }
+
     func run() async {
         guard let input, header != nil else { return }
 
@@ -137,11 +144,13 @@ final class DecryptModel {
         let token = CancelToken()
         self.token = token
         isRunning = true
+        isPaused = false
         progress = nil
         errorMessage = nil
         output = nil
         defer {
             isRunning = false
+            isPaused = false
             self.token = nil
         }
 

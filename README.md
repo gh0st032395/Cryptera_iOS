@@ -10,8 +10,8 @@ Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 
 ## Stato
 
-🚧 **M4 completata** — un `.ecf` aperto dall'app File viene decifrato e salvato.
-La cifratura arriva in M5.
+🚧 **M5 completata** — l'app cifra e decifra file singoli, con un'interfaccia
+propria. La cifratura di cartelle arriva in M6.
 
 La roadmap completa è in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 La specifica di riferimento è in [`SPEC.md`](SPEC.md).
@@ -22,7 +22,7 @@ La specifica di riferimento è in [`SPEC.md`](SPEC.md).
 | M2 — XCFramework | ✅ **app verde su simulatore** |
 | M3 — Primo end-to-end (`verify`) | ✅ **48 test verdi, revisionata** |
 | M4 — Decrypt | ✅ **79 test verdi, verificata sul simulatore** |
-| M5 — Encrypt file | ⬜ |
+| M5 — Encrypt file | ✅ **99 test verdi, con design system anticipato da M9** |
 | M6 — Encrypt cartella | ⬜ |
 | M7 — Round-trip incrociato (**gate di rilascio**) | ⬜ |
 | M8 — Batch + Audit | ⬜ |

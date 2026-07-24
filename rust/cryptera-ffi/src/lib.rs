@@ -222,6 +222,35 @@ pub fn security_profile_memory_bytes(profile: SecurityProfile) -> u64 {
     profile.memory_bytes()
 }
 
+/// Parametri Argon2 di un profilo (SPEC §5.2).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct Argon2Params {
+    /// Numero di passaggi.
+    pub time_cost: u32,
+    pub memory_kib: u32,
+    pub parallelism: u16,
+}
+
+/// Parametri esatti del profilo, per quello che la UI deve dire all'utente.
+///
+/// SPEC §8.2 chiede una "stima del tempo". Un tempo in secondi sarebbe
+/// **inventato**: dipende dal dispositivo, e nessuna misura è disponibile prima
+/// di eseguire l'operazione. Con i parametri veri la UI può invece esprimere il
+/// costo in modo derivato e verificabile — memoria esatta, numero di passaggi,
+/// e il rapporto di lavoro rispetto al profilo Standard.
+///
+/// Come per gli altri valori di §5.2: Rust resta l'unica fonte, perché sono gli
+/// stessi numeri che finiscono nell'header.
+#[uniffi::export]
+pub fn security_profile_params(profile: SecurityProfile) -> Argon2Params {
+    let (time_cost, memory_kib, parallelism) = profile.params();
+    Argon2Params {
+        time_cost,
+        memory_kib,
+        parallelism,
+    }
+}
+
 /// Overhead di parità in percentuale per il profilo di integrità.
 ///
 /// La UI lo mostra insieme alla dimensione finale stimata, altrimenti `Max`
@@ -1012,6 +1041,25 @@ mod tests {
 
     /// Swift usa il nome dell'header per nominare il file decifrato: la
     /// sanificazione deve essere quella di Rust, non una seconda copia.
+    /// I parametri esposti alla UI devono essere gli stessi che finiscono
+    /// nell'header, non una copia che può divergere.
+    #[test]
+    fn parametri_esposti_coincidono_con_i_profili() {
+        for profilo in [
+            SecurityProfile::Standard,
+            SecurityProfile::Strong,
+            SecurityProfile::Paranoid,
+        ] {
+            let esposti = security_profile_params(profilo);
+            let (t, m, p) = profilo.params();
+            assert_eq!((esposti.time_cost, esposti.memory_kib, esposti.parallelism), (t, m, p));
+            assert_eq!(
+                security_profile_memory_bytes(profilo),
+                u64::from(esposti.memory_kib) * 1024
+            );
+        }
+    }
+
     #[test]
     fn safe_output_name_neutralizza_i_nomi_ostili() {
         assert_eq!(safe_output_name("../../evil.txt".into(), "out.bin".into()), "evil.txt");

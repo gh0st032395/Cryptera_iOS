@@ -27,17 +27,27 @@ final class DecryptFlowUITests: XCTestCase {
         return app
     }
 
+    /// Cerca per identificatore **senza vincolare il tipo**.
+    ///
+    /// Il tipo di un elemento composto dipende da cosa contiene: la stessa card
+    /// diventa `staticText` o `otherElement` a seconda che abbia dentro un
+    /// pulsante. Legare il test al tipo lo fa fallire a ogni ritocco della vista,
+    /// per un motivo che non c'entra con ciò che sta verificando.
+    private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier]
+    }
+
     /// Un `.ecf` aperto dall'esterno deve arrivare nella schermata Decrypt già
     /// compilato, con i metadati leggibili senza password già mostrati.
     func testEcfApertoDallEsternoPrecompilaLaSchermata() {
         let app = launch(fixture: "v4-basic")
 
-        let file = app.staticTexts["decrypt.input"]
+        let file = element(app, "decrypt.input")
         XCTAssertTrue(file.waitForExistence(timeout: 15), "il file aperto non è arrivato alla schermata")
         XCTAssertTrue(file.label.contains("v4-basic"))
 
         XCTAssertTrue(
-            app.staticTexts["decrypt.meta.content"].exists,
+            element(app, "decrypt.meta.content").exists,
             "i metadati devono essere leggibili prima di chiedere la password"
         )
         XCTAssertFalse(
@@ -56,7 +66,7 @@ final class DecryptFlowUITests: XCTestCase {
 
         app.buttons["decrypt.run"].tap()
 
-        let outcome = app.staticTexts["decrypt.outcome.success"]
+        let outcome = element(app, "decrypt.outcome.success")
         XCTAssertTrue(outcome.waitForExistence(timeout: 60), "la decifratura non ha prodotto un risultato")
         XCTAssertTrue(
             outcome.label.contains("secret-note.txt"),
@@ -93,7 +103,7 @@ final class DecryptFlowUITests: XCTestCase {
         password.tap()
         password.typeText(fixturePassword)
         app.buttons["decrypt.run"].tap()
-        XCTAssertTrue(app.staticTexts["decrypt.outcome.success"].waitForExistence(timeout: 60))
+        XCTAssertTrue(element(app, "decrypt.outcome.success").waitForExistence(timeout: 60))
 
         app.buttons["decrypt.save"].tap()
 
@@ -120,7 +130,7 @@ final class DecryptFlowUITests: XCTestCase {
 
         app.buttons["decrypt.run"].tap()
 
-        let failure = app.staticTexts["decrypt.outcome.failure"]
+        let failure = element(app, "decrypt.outcome.failure")
         XCTAssertTrue(failure.waitForExistence(timeout: 60), "atteso un messaggio, non un crash")
 
         // SPEC §10.3: né codici grezzi né percorsi raggiungono l'utente.
