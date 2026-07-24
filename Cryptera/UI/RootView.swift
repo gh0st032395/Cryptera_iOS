@@ -22,6 +22,7 @@ final class AppRouter {
         case encrypt
         case decrypt
         case verify
+        case settings
     }
 
     var tab: Tab = .decrypt
@@ -42,30 +43,39 @@ final class AppRouter {
 }
 
 /// Contenitore delle schermate.
-///
-/// La struttura definitiva di SPEC §8.1 — cinque tab su iPhone,
-/// `NavigationSplitView` su iPad — arriva con il design system in M9. Qui ci
-/// sono le due schermate che esistono.
 struct RootView: View {
     @State private var router = AppRouter()
+
+    @AppStorage(PreferenceKey.language) private var language = AppLanguage.system.rawValue
+    @AppStorage(PreferenceKey.theme) private var theme = AppTheme.system.rawValue
 
     var body: some View {
         TabView(selection: $router.tab) {
             EncryptView(router: router)
-                .tabItem { Label("Cifra", systemImage: "lock") }
+                .tabItem { Label(L.t("Encrypt"), systemImage: "lock") }
                 .tag(AppRouter.Tab.encrypt)
 
             DecryptView(router: router)
-                .tabItem { Label("Decifra", systemImage: "lock.open") }
+                .tabItem { Label(L.t("Decrypt"), systemImage: "lock.open") }
                 .tag(AppRouter.Tab.decrypt)
 
             VerifyView()
-                .tabItem { Label("Verifica", systemImage: "checkmark.shield") }
+                .tabItem { Label(L.t("Verify"), systemImage: "checkmark.shield") }
                 .tag(AppRouter.Tab.verify)
+
+            SettingsView()
+                .tabItem { Label(L.t("Settings"), systemImage: "gearshape") }
+                .tag(AppRouter.Tab.settings)
         }
         // Il verde di Cryptera diventa il colore delle azioni in tutta l'app,
         // barra delle tab compresa.
         .tint(Design.accent)
+        .preferredColorScheme(AppTheme(rawValue: theme)?.colorScheme)
+        // Le stringhe si risolvono con `L.t(...)`, che legge la lingua scelta al
+        // momento della chiamata: cambiarla non invaliderebbe da sola alcuna
+        // vista. Ricostruire l'albero è il modo diretto per farlo — succede una
+        // volta, quando l'utente cambia lingua di proposito.
+        .id(language)
         .onOpenURL { router.open($0) }
         .task {
             // Prima di qualunque operazione: un output decifrato di una sessione
@@ -91,6 +101,9 @@ struct RootView: View {
 ///
 /// È il motivo per cui le fixture restano nel bundle in Debug; in Release sono
 /// escluse da `project.yml` e questo codice non viene nemmeno compilato.
+///
+/// ⚠️ La scorciatoia **salta** l'apertura del selettore, che è proprio il punto
+/// che si era rotto una volta: quel tratto è coperto da `FilePickerUITests`.
 enum LaunchArguments {
     static let openFixture = "-apri-fixture"
     /// Consegna una fixture alla schermata Cifra. Vale come file qualsiasi: a

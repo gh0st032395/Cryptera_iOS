@@ -7,6 +7,11 @@ final class EncryptFlowTests: XCTestCase {
 
     private let strongPassword = "Abcdefgh1!"
 
+    override func setUp() {
+        super.setUp()
+        useEnglish()
+    }
+
     private func fileDiProva(_ contenuto: String = "contenuto di prova") throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("sorgente-\(UUID().uuidString).txt")
@@ -55,7 +60,7 @@ final class EncryptFlowTests: XCTestCase {
         model.passwordConfirmation = "abc"
         XCTAssertFalse(model.canRun)
         let motivo = try XCTUnwrap(model.blockingReason)
-        XCTAssertTrue(motivo.contains("debole"), "ottenuto: \(motivo)")
+        XCTAssertTrue(motivo.contains("10 characters"), "ottenuto: \(motivo)")
 
         model.password = strongPassword
         model.passwordConfirmation = strongPassword
@@ -69,7 +74,7 @@ final class EncryptFlowTests: XCTestCase {
         model.passwordConfirmation = strongPassword + "x"
 
         XCTAssertFalse(model.canRun)
-        XCTAssertEqual(model.blockingReason, "Le due password non coincidono.")
+        XCTAssertEqual(model.blockingReason, "The two passwords do not match.")
     }
 
     func testSenzaFileNonSiPuoAvviare() {
@@ -77,7 +82,7 @@ final class EncryptFlowTests: XCTestCase {
         model.password = strongPassword
         model.passwordConfirmation = strongPassword
         XCTAssertFalse(model.canRun)
-        XCTAssertEqual(model.blockingReason, "Scegli un file da cifrare.")
+        XCTAssertEqual(model.blockingReason, "Choose a file to encrypt.")
     }
 
     /// I profili devono cambiare davvero il file prodotto, non solo l'etichetta
@@ -111,6 +116,37 @@ final class EncryptFlowTests: XCTestCase {
         XCTAssertEqual(output.meta.argon2MemKib, 256 * 1024, "profilo Forte (SPEC §5.2)")
         XCTAssertEqual(output.meta.argon2Time, 6)
         model.discardWork()
+    }
+
+    /// I predefiniti si rileggono a schermata ferma, non mentre si sta
+    /// lavorando su un file.
+    ///
+    /// Il modello si costruisce una volta sola, quando la `TabView` crea la
+    /// schermata: senza rilettura, un predefinito cambiato nelle impostazioni
+    /// resterebbe salvato e inerte. Ma rileggerlo sempre sovrascriverebbe le
+    /// scelte fatte apposta per il file in corso.
+    func testIPredefinitiSiRileggonoSoloASchermataFerma() throws {
+        let defaults = UserDefaults.standard
+        // Si parte da pulito: le impostazioni sopravvivono fra un'esecuzione e
+        // l'altra nel contenitore dell'app, e un UI test che ne ha cambiata una
+        // renderebbe questo test verde o rosso a seconda di cosa è girato prima.
+        defaults.removeObject(forKey: PreferenceKey.securityProfile)
+        addTeardownBlock { defaults.removeObject(forKey: PreferenceKey.securityProfile) }
+
+        let model = EncryptModel()
+        XCTAssertEqual(model.securityProfile, EncryptionDefaults.builtIn.securityProfile)
+
+        defaults.set(SecurityProfile.paranoid.storageValue, forKey: PreferenceKey.securityProfile)
+        model.refreshDefaultsIfIdle()
+        XCTAssertEqual(model.securityProfile, .paranoid, "a schermata ferma il nuovo predefinito vale")
+
+        // Con un file scelto la rilettura non deve toccare nulla: quelle sono
+        // scelte fatte per **questo** file.
+        model.select(try fileDiProva())
+        model.securityProfile = .standard
+        defaults.set(SecurityProfile.strong.storageValue, forKey: PreferenceKey.securityProfile)
+        model.refreshDefaultsIfIdle()
+        XCTAssertEqual(model.securityProfile, .standard, "una scelta in corso non va sovrascritta")
     }
 
     /// La stima serve a non far scoprire a operazione finita che il file è

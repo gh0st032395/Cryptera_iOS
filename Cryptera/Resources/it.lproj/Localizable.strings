@@ -1,0 +1,176 @@
+/* Traduzione italiana di Cryptera iOS.
+
+   La chiave è la stringa inglese: l'inglese è la lingua sorgente e non ha un
+   file proprio. Una chiave senza traduzione ricade sull'inglese da sola.
+
+   Dove esiste una corrispondenza reale con il desktop — messaggi d'errore e
+   robustezza della password — la traduzione è **portata** da
+   `ui/modules/i18n.js` dell'upstream, non riscritta: le due applicazioni devono
+   dire la stessa cosa con le stesse parole. La chiave dell'upstream è annotata
+   accanto. */
+
+// MARK: - Navigazione
+
+"Encrypt" = "Cifra";                            // nav_encrypt
+"Decrypt" = "Decifra";                          // nav_decrypt
+"Verify" = "Verifica";                          // nav_verify
+"Settings" = "Impostazioni";
+
+// MARK: - Scelta del file
+
+"To encrypt" = "Da cifrare";
+"Encrypted file" = "File cifrato";
+"Choose a file" = "Scegli un file";
+"Choose an .ecf file" = "Scegli un file .ecf";
+"Folders are coming later" = "Le cartelle arrivano più avanti";
+"Or open one from the Files app" = "Oppure aprine uno dall'app File";
+"Checks its integrity without writing it out" = "Ne controlla l'integrità senza scriverlo su disco";
+"Change" = "Cambia";
+"Remove" = "Rimuovi";
+
+// MARK: - Password
+
+"Password" = "Password";                        // label_password
+"Repeat the password" = "Ripeti la password";
+"The two passwords do not match." = "Le due password non coincidono.";
+"Show password" = "Mostra la password";
+"Hide password" = "Nascondi la password";
+"Keyfile" = "Keyfile";
+"Add a keyfile" = "Aggiungi un keyfile";
+"Without this keyfile the file will not open, not even with the right password. Keep it as carefully as the password." = "Senza questo keyfile il file non si apre, nemmeno con la password giusta. Conservalo con la stessa cura.";
+
+// Robustezza — pwd_strength_*
+"Very weak" = "Molto debole";
+"Weak" = "Debole";
+"Medium" = "Media";
+"Strong" = "Forte";
+"Very strong" = "Molto forte";
+
+// Suggerimenti — pwd_feedback_*
+"Good password" = "Buona password";
+"Great password" = "Ottima password";
+"Add:" = "Aggiungi:";
+"at least 10 characters" = "almeno 10 caratteri";
+"an uppercase letter" = "una maiuscola";
+"a lowercase letter" = "una minuscola";
+"a digit" = "un numero";
+"a symbol" = "un simbolo";
+
+// Policy — pwd_policy_*
+"The password must be at least 10 characters long." = "La password deve essere di almeno 10 caratteri.";
+"The password is too simple: mix uppercase, lowercase, digits and symbols." = "La password è troppo semplice: mescola maiuscole, minuscole, numeri e simboli.";
+
+// MARK: - Opzioni di cifratura
+
+"Options" = "Opzioni";
+"Password protection" = "Protezione della password";
+"Damage resistance" = "Resistenza ai danneggiamenti";
+"Compression" = "Compressione";
+"Hide the file name" = "Nascondi il nome del file";
+"Password check record" = "Record di controllo password";
+
+// Profili — opt_*
+"Standard" = "Standard";
+"High" = "Alta";
+"Maximum" = "Massima";
+"Low" = "Bassa";
+"Balanced" = "Bilanciata";
+"None" = "Nessuna";
+
+"%@ of memory, %d passes" = "%1$@ di memoria, %2$d passaggi";
+"— about %d× slower than Standard" = "— circa %d× più lento del profilo Standard";
+"Adds about %d%% of recovery data" = "Aggiunge circa %d%% di dati di recupero";
+", for a file of about %@" = ", per un file di circa %@";
+"More recovery data means surviving more damage." = "Più dati di recupero significa sopravvivere a più danni.";
+"With compression on, the result will be smaller." = "Con la compressione attiva il risultato sarà più piccolo.";
+"LZMA compresses more and is slower. On already compressed files — photos, video, archives — neither helps." = "LZMA comprime di più ed è più lenta. Su file già compressi — foto, video, archivi — nessuna delle due aiuta.";
+"This profile needs more memory than is available right now. Encrypting could make the app quit abruptly." = "Questo profilo chiede più memoria di quanta ne sia disponibile ora. Cifrare potrebbe far chiudere l'app di colpo.";
+
+// MARK: - Esecuzione
+
+"Starting" = "Avvio";
+"Building archive" = "Creazione archivio";
+"Encrypting" = "Cifratura";
+"Decrypting" = "Decifratura";
+"Verifying" = "Verifica";
+"Working" = "Operazione in corso";
+"Pause" = "Pausa";
+"Resume" = "Riprendi";
+"Cancel" = "Annulla";
+
+"Choose a file to encrypt." = "Scegli un file da cifrare.";
+"This device does not have enough memory for the chosen profile." = "Questo dispositivo non ha memoria sufficiente per il profilo scelto.";
+
+// MARK: - Avviso di irreversibilità — pwd_warning_*
+
+"There is no password recovery" = "Non esiste recupero password";
+"Cryptera has no backdoor and no recovery mechanism: if you forget the password — and lose the keyfile, if you use one — the encrypted data is gone for good.\n\nKeep it somewhere safe, such as a password manager." = "Cryptera non ha backdoor né meccanismi di recupero: se dimentichi la password — e perdi il keyfile, se ne usi uno — i dati cifrati sono irrecuperabili per sempre.\n\nConservala in un posto sicuro, ad esempio un gestore di password.";
+"I understand, encrypt" = "Ho capito, cifra";
+
+// MARK: - Metadati e risultati
+
+"Result" = "Risultato";
+"Format" = "Formato";
+"Size" = "Dimensione";
+"Contents" = "Contenuto";
+"Archive of several files" = "Archivio di più file";
+"Single file" = "File singolo";
+"Original name" = "Nome originale";
+"encrypted — password needed" = "cifrato — serve la password";
+"Recovery" = "Recupero";
+"%d blocks per %d" = "%1$d blocchi ogni %2$d";
+"Folder" = "Cartella";
+
+"File encrypted." = "File cifrato.";
+"File decrypted." = "File decifrato.";
+"Archive extracted." = "Archivio estratto.";
+"The file is intact and the password is correct." = "Il file è integro e la password è corretta.";  // ver_result_ok
+"Verifying writes nothing to disk." = "La verifica non scrive nulla su disco.";
+"Extract the archive" = "Estrai l'archivio";
+"Turn it off to get the archive as it is, without extracting its contents." = "Disattivalo per ottenere l'archivio così com'è, senza estrarne il contenuto.";
+"Save to Files" = "Salva in File";
+"Delete the decrypted copy" = "Elimina la copia in chiaro";
+
+// MARK: - Errori — err_*
+
+"Something went wrong." = "Si è verificato un errore imprevisto.";
+"Wrong password or keyfile." = "Password o keyfile non corretti.";  // err_password_invalid
+"Wrong password or keyfile, or the file has been modified." = "Password o keyfile non corretti, oppure il file è stato modificato.";  // err_header_auth
+"This is not a valid Cryptera file." = "Il file non è un archivio Cryptera valido.";  // err_header_invalid
+"The file's parameters are outside the allowed limits." = "I parametri del file sono fuori dai limiti consentiti.";
+"The file is incomplete." = "Il file è incompleto.";  // err_file_truncated
+"The file is damaged beyond what can be recovered." = "Il file è danneggiato oltre la capacità di recupero.";  // err_corrupt_beyond_fec
+"Could not read or write the file." = "Errore di lettura o scrittura.";  // err_io
+"Operation cancelled." = "Operazione annullata.";  // err_cancelled
+"Enter a password." = "Inserisci una password.";  // err_password_required
+"Choose a file or folder." = "Seleziona un file o una cartella.";  // err_input_required
+"Choose a destination." = "Scegli una destinazione.";  // err_output_required
+"A file with this name already exists. It will not be overwritten." = "Esiste già un file con questo nome. Non verrà sovrascritto.";  // err_output_exists
+"Could not create the archive." = "Non è stato possibile creare l'archivio.";  // err_tar
+"Could not extract the archive." = "Non è stato possibile estrarre l'archivio.";  // err_extract
+"Access to the file was denied. Try selecting it again." = "Accesso al file negato. Riprova selezionandolo di nuovo.";
+"Not enough space to complete the operation." = "Spazio insufficiente per completare l'operazione.";
+"The device locked during the operation. Unlock it and try again." = "Il dispositivo si è bloccato durante l'operazione. Sbloccalo e riprova.";
+"This device does not have enough memory for the chosen security profile." = "Questo dispositivo non ha memoria sufficiente per il profilo di sicurezza scelto.";
+
+// MARK: - Impostazioni
+
+"Appearance" = "Aspetto";
+"Language" = "Lingua";
+"Theme" = "Tema";
+"System" = "Sistema";
+"Light" = "Chiaro";
+"Dark" = "Scuro";
+
+"Encryption defaults" = "Valori predefiniti";
+"Applied to new files. You can still change them per file before encrypting." = "Si applicano ai nuovi file. Restano modificabili per ogni singolo file prima di cifrarlo.";
+
+"Warnings" = "Avvisi";
+"You have confirmed you understand that a lost password cannot be recovered." = "Hai confermato di aver capito che una password persa non è recuperabile.";
+"Show the warning again" = "Mostra di nuovo l'avviso";
+"The warning about unrecoverable passwords will appear before your next encryption." = "L'avviso sulle password irrecuperabili comparirà prima della prossima cifratura.";
+
+"About" = "Informazioni";
+"App version" = "Versione app";
+"Core" = "Core";
+"Cryptera works entirely on this device. It makes no network requests and collects nothing." = "Cryptera lavora interamente su questo dispositivo. Non effettua richieste di rete e non raccoglie nulla.";

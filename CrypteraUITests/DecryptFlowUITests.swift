@@ -22,7 +22,10 @@ final class DecryptFlowUITests: XCTestCase {
 
     private func launch(fixture: String) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-apri-fixture", fixture]
+        // Lingua fissata: le asserzioni non devono dipendere da quella del
+        // simulatore. Il pulsante del **selettore di sistema** resta invece
+        // nella lingua del dispositivo, ed è coperto accettandone due.
+        app.launchArguments = ["-apri-fixture", fixture, "-appLanguage", "english"]
         app.launch()
         return app
     }

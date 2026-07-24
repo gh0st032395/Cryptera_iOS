@@ -1,4 +1,18 @@
 import XCTest
+@testable import Cryptera
+
+extension XCTestCase {
+    /// Fissa la lingua dell'app per la durata del test.
+    ///
+    /// Senza, le asserzioni sui messaggi dipenderebbero dalla lingua del
+    /// **simulatore**: verdi su una macchina italiana, rosse altrove. Si sceglie
+    /// l'inglese perché è la lingua sorgente, quindi le stringhe attese sono le
+    /// stesse che si leggono nel codice.
+    func useEnglish() {
+        UserDefaults.standard.set(AppLanguage.english.rawValue, forKey: L.languageKey)
+        addTeardownBlock { UserDefaults.standard.removeObject(forKey: L.languageKey) }
+    }
+}
 
 extension XCTestCase {
     /// URL di una fixture dell'upstream nel bundle di test.

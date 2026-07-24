@@ -27,6 +27,16 @@ final class FilePickerUITests: XCTestCase {
             || app.buttons["Cancel"].waitForExistence(timeout: 3)
     }
 
+    /// La lingua dell'app è fissata perché i nomi delle schede sono stringhe
+    /// nostre. Quella del **selettore di sistema** segue invece il dispositivo:
+    /// è il motivo per cui `pickerAppeared` accetta due lingue.
+    private func launch(_ extra: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-appLanguage", "english"] + extra
+        app.launch()
+        return app
+    }
+
     private func tap(_ app: XCUIApplication, _ identifier: String) {
         let element = app.descendants(matching: .any)[identifier]
         XCTAssertTrue(element.waitForExistence(timeout: 15), "\(identifier) non è comparso")
@@ -34,8 +44,7 @@ final class FilePickerUITests: XCTestCase {
     }
 
     func testDecryptApreIlSelettore() {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launch()
 
         tap(app, "decrypt.chooseInput")
 
@@ -46,20 +55,18 @@ final class FilePickerUITests: XCTestCase {
     }
 
     func testVerifyApreIlSelettore() {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launch()
 
-        app.tabBars.buttons["Verifica"].tap()
+        app.tabBars.buttons["Verify"].tap()
         tap(app, "verify.chooseInput")
 
         XCTAssertTrue(pickerAppeared(app), "il selettore non si è aperto in Verifica")
     }
 
     func testEncryptApreIlSelettore() {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launch()
 
-        app.tabBars.buttons["Cifra"].tap()
+        app.tabBars.buttons["Encrypt"].tap()
         tap(app, "encrypt.chooseInput")
 
         XCTAssertTrue(pickerAppeared(app), "il selettore non si è aperto in Cifra")
@@ -69,9 +76,7 @@ final class FilePickerUITests: XCTestCase {
     /// schermata. Con entrambi attaccati alla stessa view ne funzionava uno
     /// solo, quindi non basta verificarne uno per schermata.
     func testEncryptApreAncheIlSelettoreDelKeyfile() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-cifra-fixture", "v4-basic"]
-        app.launch()
+        let app = launch(["-cifra-fixture", "v4-basic"])
 
         tap(app, "encrypt.addKeyfile")
 

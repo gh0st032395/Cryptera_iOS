@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
+  # L'inglese è la lingua sorgente: le chiavi di localizzazione **sono** le
+  # stringhe inglesi, quindi non esiste un `en.lproj` da mantenere e una chiave
+  # senza traduzione ricade sull'inglese invece di mostrare un identificatore.
+  developmentLanguage: en
   # Il .xcodeproj è rigenerato da questo file e non è committato: è il motivo
   # per cui si usa XcodeGen (SPEC §3.1 — i .pbxproj producono conflitti di
   # merge illeggibili).

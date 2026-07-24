@@ -9,6 +9,11 @@ import XCTest
 /// robustezza di una password mentire ha conseguenze.
 final class PasswordStrengthTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        useEnglish()
+    }
+
     func testGradiniDelPunteggio() {
         // punti: <8 caratteri, nessuna combinazione → 0
         XCTAssertEqual(PasswordStrength("abc").level, 0)
@@ -79,9 +84,47 @@ final class PasswordStrengthTests: XCTestCase {
         let debole = PasswordStrength("abcdefghij")
         XCTAssertEqual(debole.missing, [.uppercase, .number, .special])
         let hint = debole.hint ?? ""
-        XCTAssertTrue(hint.contains("maiuscola"), "ottenuto: \(hint)")
+        XCTAssertTrue(hint.contains("uppercase"), "ottenuto: \(hint)")
 
-        XCTAssertEqual(PasswordStrength("Abcdefgh1!").hint, "Ottima scelta.")
-        XCTAssertEqual(PasswordStrength("Abcdefghi1").hint, "Va bene.")
+        XCTAssertEqual(PasswordStrength("Abcdefgh1!").hint, "Great password")
+        XCTAssertEqual(PasswordStrength("Abcdefghi1").hint, "Good password")
+    }
+
+    /// La barra e il pulsante non devono dire cose opposte.
+    ///
+    /// Una password di **nove** caratteri con tipi misti arriva a 4 punti,
+    /// quindi livello 3: legando l'incoraggiamento al solo livello — come fa
+    /// l'upstream — la schermata diceva "Good password" mentre il pulsante
+    /// restava spento perché la policy chiede anche dieci caratteri.
+    ///
+    /// Sull'interfaccia del desktop non si nota, perché lì la violazione della
+    /// policy compare solo al momento di cifrare; qui i due messaggi stanno
+    /// sotto gli occhi insieme.
+    func testAAAiNoveCaratteriNonSiIncoraggiaMentreSiBlocca() {
+        let novecaratteri = PasswordStrength("Abcdefg1!")
+
+        XCTAssertEqual(novecaratteri.length, 9)
+        XCTAssertEqual(novecaratteri.level, 3, "livello alto ma lunghezza insufficiente")
+        XCTAssertFalse(novecaratteri.meetsEncryptionPolicy)
+
+        let hint = novecaratteri.hint ?? ""
+        XCTAssertFalse(hint.contains("Good"), "incoraggiamento mentre la cifratura è bloccata: \(hint)")
+        XCTAssertTrue(hint.contains("10 characters"), "ottenuto: \(hint)")
+
+        // E il motivo del blocco dice quale delle due condizioni manca, invece
+        // di parlare genericamente di password debole.
+        let violazione = novecaratteri.policyViolation ?? ""
+        XCTAssertTrue(violazione.contains("10 characters"), "ottenuto: \(violazione)")
+    }
+
+    /// Il complemento: dieci caratteri e livello 3 — "Good password" — devono
+    /// permettere di cifrare. È il caso che l'utente si aspettava funzionasse.
+    func testUnaPasswordBuonaDaDieciCaratteriPuoCifrare() {
+        let buona = PasswordStrength("Abcdefghi1")
+
+        XCTAssertEqual(buona.level, 3)
+        XCTAssertTrue(buona.meetsEncryptionPolicy)
+        XCTAssertNil(buona.policyViolation)
+        XCTAssertEqual(buona.hint, "Good password")
     }
 }

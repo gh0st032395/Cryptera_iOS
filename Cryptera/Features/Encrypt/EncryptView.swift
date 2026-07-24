@@ -4,8 +4,9 @@ import SwiftUI
 ///
 /// L'ordine delle sezioni è l'ordine delle decisioni: cosa cifrare, con quale
 /// password, con quali parametri. Le opzioni restano chiuse — hanno buoni valori
-/// predefiniti, e aprirle in faccia a chi vuole solo cifrare un file
-/// trasformerebbe un gesto semplice in un modulo da compilare.
+/// predefiniti, modificabili nelle impostazioni, e aprirle in faccia a chi vuole
+/// solo cifrare un file trasformerebbe un gesto semplice in un modulo da
+/// compilare.
 struct EncryptView: View {
     let router: AppRouter
 
@@ -19,7 +20,8 @@ struct EncryptView: View {
     /// L'avviso di irreversibilità si mostra **una volta sola**, come sul
     /// desktop (`warning.js`, chiave in `localStorage`). Ripeterlo a ogni
     /// cifratura lo trasformerebbe in un ostacolo da chiudere senza leggere.
-    @AppStorage("irreversibilityAcknowledged") private var acknowledged = false
+    /// Si può farlo ricomparire dalle impostazioni.
+    @AppStorage(PreferenceKey.irreversibilityAcknowledged) private var acknowledged = false
 
     var body: some View {
         NavigationStack {
@@ -35,12 +37,15 @@ struct EncryptView: View {
                     Notice(kind: .danger, text: message, identifier: "encrypt.outcome.failure")
                 }
             }
-            .navigationTitle("Cifra")
+            .navigationTitle(L.t("Encrypt"))
         }
         .task(id: router.pendingEncryptInput) {
             guard let pending = router.pendingEncryptInput else { return }
             model.select(pending.url)
         }
+        // I predefiniti possono essere cambiati mentre questa schermata esiste
+        // già: la `TabView` la costruisce una volta sola.
+        .onAppear { model.refreshDefaultsIfIdle() }
         // ⚠️ I due `.fileImporter` **non** stanno qui, ma ciascuno sulla card
         // che lo apre. Due modificatori di presentazione dello stesso tipo sulla
         // stessa view entrano in conflitto: SwiftUI ne onora uno solo e l'altro
@@ -49,42 +54,34 @@ struct EncryptView: View {
         .fileMover(isPresented: $exporting, file: model.output?.url) { result in
             if case .success = result { model.discardWork() }
         }
-        .alert("Non esiste recupero password", isPresented: $askingIrreversibility) {
-            Button("Annulla", role: .cancel) {}
-            Button("Ho capito, cifra") {
+        .alert(L.t("There is no password recovery"), isPresented: $askingIrreversibility) {
+            Button(L.t("Cancel"), role: .cancel) {}
+            Button(L.t("I understand, encrypt")) {
                 acknowledged = true
                 Task { await run() }
             }
         } message: {
-            Text(
-                """
-                Cryptera non ha backdoor né meccanismi di recupero: se dimentichi \
-                la password — e perdi il keyfile, se ne usi uno — i dati cifrati \
-                sono irrecuperabili per sempre.
-
-                Conservala in un posto sicuro, ad esempio un gestore di password.
-                """
-            )
+            Text(L.t("Cryptera has no backdoor and no recovery mechanism: if you forget the password — and lose the keyfile, if you use one — the encrypted data is gone for good.\n\nKeep it somewhere safe, such as a password manager."))
         }
     }
 
     // MARK: - Sezioni
 
     private var inputCard: some View {
-        Card(title: "Da cifrare") {
+        Card(title: L.t("To encrypt")) {
             if let input = model.input {
                 FileTile(
                     name: input.name,
                     detail: input.size.map(SizeFormatter.string),
                     systemImage: "doc",
-                    changeTitle: "Cambia",
+                    changeTitle: L.t("Change"),
                     onChange: { choosingInput = true }
                 )
                 .accessibilityIdentifier("encrypt.input")
             } else {
                 FilePlaceholder(
-                    title: "Scegli un file",
-                    subtitle: "Le cartelle arrivano più avanti",
+                    title: L.t("Choose a file"),
+                    subtitle: L.t("Folders are coming later"),
                     action: { choosingInput = true }
                 )
                 .accessibilityIdentifier("encrypt.chooseInput")
@@ -96,9 +93,9 @@ struct EncryptView: View {
     }
 
     private var passwordCard: some View {
-        Card(title: "Password") {
+        Card(title: L.t("Password")) {
             SecretField(
-                title: "Password",
+                title: L.t("Password"),
                 text: $model.password,
                 identifier: "encrypt.password"
             )
@@ -107,12 +104,12 @@ struct EncryptView: View {
                 StrengthBar(assessment: model.strength)
                 Divider()
                 SecretField(
-                    title: "Ripeti la password",
+                    title: L.t("Repeat the password"),
                     text: $model.passwordConfirmation,
                     identifier: "encrypt.passwordConfirmation"
                 )
                 if !model.passwordConfirmation.isEmpty && !model.passwordsMatch {
-                    Notice(kind: .warning, text: "Le due password non coincidono.")
+                    Notice(kind: .warning, text: L.t("The two passwords do not match."))
                 }
             }
 
@@ -121,18 +118,18 @@ struct EncryptView: View {
             if let keyfile = model.keyfile {
                 FileTile(
                     name: keyfile.name,
-                    detail: "Keyfile",
+                    detail: L.t("Keyfile"),
                     systemImage: "key",
                     tint: Design.info,
-                    changeTitle: "Rimuovi",
+                    changeTitle: L.t("Remove"),
                     onChange: { model.clearKeyfile() }
                 )
                 Notice(
                     kind: .warning,
-                    text: "Senza questo keyfile il file non si apre, nemmeno con la password giusta. Conservalo con la stessa cura."
+                    text: L.t("Without this keyfile the file will not open, not even with the right password. Keep it as carefully as the password.")
                 )
             } else {
-                Button("Aggiungi un keyfile") { choosingKeyfile = true }
+                Button(L.t("Add a keyfile")) { choosingKeyfile = true }
                     .font(.subheadline.weight(.medium))
                     .accessibilityIdentifier("encrypt.addKeyfile")
             }
@@ -154,8 +151,8 @@ struct EncryptView: View {
                     Divider()
                     compressionOption
                     Divider()
-                    Toggle("Nascondi il nome del file", isOn: $model.hideFilename)
-                    Toggle("Controllo password nel file", isOn: $model.enablePasswordCheck)
+                    Toggle(L.t("Hide the file name"), isOn: $model.hideFilename)
+                    Toggle(L.t("Password check record"), isOn: $model.enablePasswordCheck)
                         .accessibilityIdentifier("encrypt.passwordCheck")
                 }
                 .padding(.top, Design.Space.m)
@@ -165,10 +162,11 @@ struct EncryptView: View {
                 .tint(Design.accent)
             } label: {
                 HStack(spacing: Design.Space.s) {
-                    Text("Opzioni").font(.body.weight(.medium))
+                    Text(L.t("Options")).font(.body.weight(.medium))
                     Text(optionsSummary)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("encrypt.optionsSummary")
                 }
             }
             .tint(.secondary)
@@ -177,33 +175,14 @@ struct EncryptView: View {
         }
     }
 
-    /// Riassunto delle scelte quando il pannello è chiuso: senza, l'unico modo
-    /// di sapere con quali parametri si sta per cifrare è aprirlo.
-    private var optionsSummary: String {
-        let security: String
-        switch model.securityProfile {
-        case .standard: security = "Standard"
-        case .strong: security = "Forte"
-        case .paranoid: security = "Paranoico"
-        }
-        let integrity: String
-        switch model.integrityProfile {
-        case .low: integrity = "bassa"
-        case .standard: integrity = "standard"
-        case .high: integrity = "alta"
-        case .max: integrity = "massima"
-        }
-        return "\(security) · resistenza \(integrity)"
-    }
-
     private var securityOption: some View {
         VStack(alignment: .leading, spacing: Design.Space.s) {
-            Text("Protezione della password")
+            Text(L.t("Password protection"))
                 .font(.subheadline.weight(.medium))
-            Picker("Protezione", selection: $model.securityProfile) {
-                Text("Standard").tag(SecurityProfile.standard)
-                Text("Forte").tag(SecurityProfile.strong)
-                Text("Paranoico").tag(SecurityProfile.paranoid)
+            Picker(L.t("Password protection"), selection: $model.securityProfile) {
+                ForEach(SecurityProfile.allCases, id: \.storageValue) { profile in
+                    Text(profile.label).tag(profile)
+                }
             }
             .pickerStyle(.segmented)
             .accessibilityIdentifier("encrypt.securityProfile")
@@ -217,7 +196,7 @@ struct EncryptView: View {
             if !model.securityProfileFitsMemory {
                 Notice(
                     kind: .danger,
-                    text: "Questo profilo chiede più memoria di quanta ne sia disponibile ora. Cifrare potrebbe far chiudere l'app di colpo.",
+                    text: L.t("This profile needs more memory than is available right now. Encrypting could make the app quit abruptly."),
                     identifier: "encrypt.memoryWarning"
                 )
             }
@@ -226,13 +205,12 @@ struct EncryptView: View {
 
     private var integrityOption: some View {
         VStack(alignment: .leading, spacing: Design.Space.s) {
-            Text("Resistenza ai danneggiamenti")
+            Text(L.t("Damage resistance"))
                 .font(.subheadline.weight(.medium))
-            Picker("Resistenza", selection: $model.integrityProfile) {
-                Text("Bassa").tag(IntegrityProfile.low)
-                Text("Standard").tag(IntegrityProfile.standard)
-                Text("Alta").tag(IntegrityProfile.high)
-                Text("Massima").tag(IntegrityProfile.max)
+            Picker(L.t("Damage resistance"), selection: $model.integrityProfile) {
+                ForEach(IntegrityProfile.allCases, id: \.storageValue) { profile in
+                    Text(profile.label).tag(profile)
+                }
             }
             .pickerStyle(.segmented)
             .accessibilityIdentifier("encrypt.integrityProfile")
@@ -248,15 +226,15 @@ struct EncryptView: View {
 
     private var compressionOption: some View {
         VStack(alignment: .leading, spacing: Design.Space.s) {
-            Text("Compressione")
+            Text(L.t("Compression"))
                 .font(.subheadline.weight(.medium))
-            Picker("Compressione", selection: $model.payloadCompression) {
-                Text("Nessuna").tag(PayloadCompression.none)
-                Text("Zlib").tag(PayloadCompression.zlib)
-                Text("LZMA").tag(PayloadCompression.lzma)
+            Picker(L.t("Compression"), selection: $model.payloadCompression) {
+                ForEach(PayloadCompression.allCases, id: \.storageValue) { option in
+                    Text(option.label).tag(option)
+                }
             }
             .pickerStyle(.segmented)
-            Text("LZMA comprime di più ed è più lenta. Su file già compressi — foto, video, archivi — nessuna delle due aiuta.")
+            Text(L.t("LZMA compresses more and is slower. On already compressed files — photos, video, archives — neither helps."))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -274,7 +252,7 @@ struct EncryptView: View {
                 )
             } else {
                 PrimaryButton(
-                    title: "Cifra",
+                    title: L.t("Encrypt"),
                     systemImage: "lock",
                     enabled: model.canRun,
                     identifier: "encrypt.run"
@@ -296,10 +274,10 @@ struct EncryptView: View {
     }
 
     private func resultCard(_ output: EncryptModel.Output) -> some View {
-        Card(title: "Risultato") {
+        Card(title: L.t("Result")) {
             Notice(
                 kind: .success,
-                text: "File cifrato.",
+                text: L.t("File encrypted."),
                 identifier: "encrypt.outcome.success"
             )
             FileTile(
@@ -310,14 +288,17 @@ struct EncryptView: View {
             )
             .accessibilityIdentifier("encrypt.output")
 
-            MetadataRow(label: "Formato", value: "ECF1 v\(output.meta.version)", monospaced: true)
+            MetadataRow(label: L.t("Format"), value: "ECF1 v\(output.meta.version)", monospaced: true)
             MetadataRow(
-                label: "Ridondanza",
-                value: "k \(output.meta.k) / r \(output.meta.r)",
-                monospaced: true
+                label: L.t("Recovery"),
+                value: L.t("%d blocks per %d", Int(output.meta.r), Int(output.meta.k))
             )
 
-            PrimaryButton(title: "Salva in File", systemImage: "square.and.arrow.down", identifier: "encrypt.save") {
+            PrimaryButton(
+                title: L.t("Save to Files"),
+                systemImage: "square.and.arrow.down",
+                identifier: "encrypt.save"
+            ) {
                 exporting = true
             }
             ShareLink(item: output.url)
@@ -326,6 +307,12 @@ struct EncryptView: View {
     }
 
     // MARK: - Testi derivati
+
+    /// Riassunto delle scelte quando il pannello è chiuso: senza, l'unico modo
+    /// di sapere con quali parametri si sta per cifrare è aprirlo.
+    private var optionsSummary: String {
+        "\(model.securityProfile.label) · \(model.integrityProfile.label)"
+    }
 
     /// Memoria e passaggi vengono da Rust; il rapporto è aritmetica su quei
     /// numeri. Non si dichiara un tempo in secondi: dipenderebbe dal
@@ -337,21 +324,21 @@ struct EncryptView: View {
         let reference = Double(standard.timeCost) * Double(standard.memoryKib)
         let ratio = reference > 0 ? work / reference : 1
 
-        var text = "\(model.securityProfileMemory) di memoria, \(params.timeCost) passaggi"
+        var text = L.t("%@ of memory, %d passes", model.securityProfileMemory, Int(params.timeCost))
         if ratio > 1.5 {
-            text += " — circa \(Int(ratio.rounded()))× più lento del profilo Standard"
+            text += " " + L.t("— about %d× slower than Standard", Int(ratio.rounded()))
         }
         return text + "."
     }
 
     private var integrityDescription: String {
-        var text = "Aggiunge circa \(model.integrityOverheadPercent)% di dati di recupero"
+        var text = L.t("Adds about %d%% of recovery data", Int(model.integrityOverheadPercent))
         if let estimate = model.estimatedOutputSize {
-            text += ", per un file di circa \(estimate)"
+            text += L.t(", for a file of about %@", estimate)
         }
-        text += ". Più dati di recupero significa sopravvivere a più danni."
+        text += ". " + L.t("More recovery data means surviving more damage.")
         if model.payloadCompression != .none {
-            text += " Con la compressione attiva il risultato sarà più piccolo."
+            text += " " + L.t("With compression on, the result will be smaller.")
         }
         return text
     }

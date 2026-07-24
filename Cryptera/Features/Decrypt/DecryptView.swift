@@ -27,7 +27,7 @@ struct DecryptView: View {
                     Notice(kind: .danger, text: message, identifier: "decrypt.outcome.failure")
                 }
             }
-            .navigationTitle("Decifra")
+            .navigationTitle(L.t("Decrypt"))
         }
         // `task(id:)` e non `onChange`: deve scattare anche quando il file è già
         // presente alla prima comparsa, cioè quando è l'apertura di un `.ecf` ad
@@ -60,20 +60,20 @@ struct DecryptView: View {
     // MARK: - Sezioni
 
     private var inputCard: some View {
-        Card(title: "File cifrato") {
+        Card(title: L.t("Encrypted file")) {
             if let input = model.input {
                 FileTile(
                     name: input.name,
                     detail: model.header.map { "ECF1 v\($0.meta.version)" },
                     systemImage: "lock.doc",
-                    changeTitle: "Cambia",
+                    changeTitle: L.t("Change"),
                     onChange: { choosingInput = true }
                 )
                 .accessibilityIdentifier("decrypt.input")
             } else {
                 FilePlaceholder(
-                    title: "Scegli un file .ecf",
-                    subtitle: "Oppure aprine uno dall'app File",
+                    title: L.t("Choose an .ecf file"),
+                    subtitle: L.t("Or open one from the Files app"),
                     systemImage: "lock.doc",
                     action: { choosingInput = true }
                 )
@@ -100,8 +100,8 @@ struct DecryptView: View {
     @ViewBuilder
     private func metadata(_ header: DecryptModel.Header) -> some View {
         MetadataRow(
-            label: "Contenuto",
-            value: header.summary.isTarContainer ? "Archivio di più file" : "File singolo",
+            label: L.t("Contents"),
+            value: header.summary.isTarContainer ? L.t("Archive of several files") : L.t("Single file"),
             identifier: "decrypt.meta.content"
         )
 
@@ -111,48 +111,48 @@ struct DecryptView: View {
         // salvataggio che non avverrà.
         if let original = header.originalName {
             MetadataRow(
-                label: "Nome originale",
+                label: L.t("Original name"),
                 value: safeOutputName(storedName: original, fallback: "—")
             )
         } else if header.summary.filenameEncrypted {
-            MetadataRow(label: "Nome originale", value: "cifrato — serve la password")
+            MetadataRow(label: L.t("Original name"), value: L.t("encrypted — password needed"))
         }
 
-        MetadataRow(label: "Dimensione", value: SizeFormatter.string(header.meta.plainSize))
-        MetadataRow(label: "Compressione", value: compressionLabel(header.summary.payloadCompression))
+        MetadataRow(label: L.t("Size"), value: SizeFormatter.string(header.meta.plainSize))
+        MetadataRow(label: L.t("Compression"), value: header.summary.payloadCompression.label)
         // In chiaro invece che "k/r": il rapporto grezzo è il vocabolario del
         // formato, non quello di chi sta guardando se il suo file è a posto.
         MetadataRow(
-            label: "Recupero",
-            value: "\(header.meta.r) blocchi ogni \(header.meta.k)"
+            label: L.t("Recovery"),
+            value: L.t("%d blocks per %d", Int(header.meta.r), Int(header.meta.k))
         )
     }
 
     private var passwordCard: some View {
-        Card(title: "Password") {
-            SecretField(title: "Password", text: $model.password, identifier: "decrypt.password")
+        Card(title: L.t("Password")) {
+            SecretField(title: L.t("Password"), text: $model.password, identifier: "decrypt.password")
 
             if let keyfile = model.keyfile {
                 Divider()
                 FileTile(
                     name: keyfile.name,
-                    detail: "Keyfile",
+                    detail: L.t("Keyfile"),
                     systemImage: "key",
                     tint: Design.info,
-                    changeTitle: "Rimuovi",
+                    changeTitle: L.t("Remove"),
                     onChange: { model.clearKeyfile() }
                 )
             } else {
                 Divider()
-                Button("Aggiungi un keyfile") { choosingKeyfile = true }
+                Button(L.t("Add a keyfile")) { choosingKeyfile = true }
                     .font(.subheadline.weight(.medium))
             }
 
             if model.offersExtraction {
                 Divider()
-                Toggle("Estrai l'archivio", isOn: $model.extractArchive)
+                Toggle(L.t("Extract the archive"), isOn: $model.extractArchive)
                     .accessibilityIdentifier("decrypt.extract")
-                Text("Disattivalo per ottenere l'archivio così com'è, senza estrarne il contenuto.")
+                Text(L.t("Turn it off to get the archive as it is, without extracting its contents."))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -174,7 +174,7 @@ struct DecryptView: View {
                 )
             } else {
                 PrimaryButton(
-                    title: "Decifra",
+                    title: L.t("Decrypt"),
                     systemImage: "lock.open",
                     enabled: model.canRun,
                     identifier: "decrypt.run"
@@ -186,21 +186,21 @@ struct DecryptView: View {
     }
 
     private func resultCard(_ output: DecryptModel.Output) -> some View {
-        Card(title: "Risultato") {
+        Card(title: L.t("Result")) {
             Notice(
                 kind: .success,
-                text: output.isDirectory ? "Archivio estratto." : "File decifrato.",
+                text: output.isDirectory ? L.t("Archive extracted.") : L.t("File decrypted."),
                 identifier: "decrypt.outcome.banner"
             )
             FileTile(
                 name: output.name,
-                detail: output.isDirectory ? "Cartella" : nil,
+                detail: output.isDirectory ? L.t("Folder") : nil,
                 systemImage: output.isDirectory ? "folder" : "doc.text"
             )
             .accessibilityIdentifier("decrypt.outcome.success")
 
             PrimaryButton(
-                title: "Salva in File",
+                title: L.t("Save to Files"),
                 systemImage: "square.and.arrow.down",
                 identifier: "decrypt.save"
             ) {
@@ -209,14 +209,14 @@ struct DecryptView: View {
 
             // `ShareLink` solo sui file: una cartella non è un contenuto che le
             // destinazioni della share sheet sappiano trattare in modo
-            // prevedibile. Per l'archivio estratto resta "Salva in File", che
+            // prevedibile. Per l'archivio estratto resta L.t("Save to Files"), che
             // gestisce entrambi.
             if !output.isDirectory {
                 ShareLink(item: output.url)
                     .accessibilityIdentifier("decrypt.share")
             }
 
-            Button("Elimina la copia in chiaro", role: .destructive) {
+            Button(L.t("Delete the decrypted copy"), role: .destructive) {
                 model.discardWork()
             }
             .font(.subheadline)
@@ -224,11 +224,4 @@ struct DecryptView: View {
         }
     }
 
-    private func compressionLabel(_ compression: PayloadCompression) -> String {
-        switch compression {
-        case .none: return "Nessuna"
-        case .zlib: return "Zlib"
-        case .lzma: return "LZMA"
-        }
-    }
 }

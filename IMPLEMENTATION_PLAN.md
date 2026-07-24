@@ -571,6 +571,75 @@ sarebbe passato lo stesso.
 testabile qualcosa crea una zona che i test non attraversano più, e va coperta
 di proposito. Il difetto era visibile in due secondi aprendo l'app.
 
+#### Rifinitura post-M5 (2026-07-24) — parte di M9 anticipata
+
+Tre richieste in corso d'opera, tutte partite dall'uso reale dell'app.
+
+**1. La barra della password e il pulsante dicevano cose opposte.** Una password
+di **nove** caratteri con tipi misti arriva a 4 punti, quindi livello 3: la
+schermata mostrava "Good password" mentre il pulsante restava spento, perché la
+policy chiede *anche* dieci caratteri.
+
+L'upstream lega l'incoraggiamento al solo livello, e nella sua interfaccia
+funziona — mostra la violazione della policy solo al momento di cifrare. Qui i
+due messaggi stanno sotto gli occhi insieme. **La policy non è cambiata** (è
+parità, e la stessa password deve essere accettata o rifiutata su entrambe le
+piattaforme): è cambiato quale messaggio si mostra, e il motivo del blocco ora
+distingue "servono dieci caratteri" da "mescola più tipi" invece di dire
+genericamente "troppo debole".
+
+**2. Inglese predefinito, italiano come traduzione.**
+
+**Deviazione deliberata dal piano.** M9 prevedeva di conservare le chiavi
+dell'upstream (`nav_encrypt`, `err_password_invalid`) per poter confrontare le
+due interfacce. Ma le stringhe di iOS non corrispondono più a quelle del
+desktop — le schermate sono altre — quindi il confronto sarebbe stato formale e
+non reale. **La chiave è la stringa inglese**: esiste un solo file da mantenere
+(`it.lproj`), e una chiave senza traduzione ricade sull'inglese invece di
+mostrare un identificatore all'utente, che è il modo in cui le localizzazioni a
+chiavi simboliche si rompono in produzione. Dove la corrispondenza è reale — i
+messaggi d'errore — la chiave dell'upstream resta annotata in `ErrorPresenter`.
+
+Le traduzioni di errori e robustezza password sono **portate** da `i18n.js`, non
+riscritte.
+
+Non si usa `Text("literal")` di SwiftUI: risolve sempre nella lingua di
+**sistema** e ignorerebbe la scelta fatta nelle impostazioni. Tutto passa da
+`L.t(...)`, e `scripts/check-localization.sh` verifica che ogni chiave usata nel
+codice abbia una traduzione — una chiave mancante non fallisce da sola, perché
+il fallback è una frase sensata.
+
+**3. Schermata Impostazioni**: lingua, tema, predefiniti di cifratura,
+ripristino dell'avviso di irreversibilità, versioni. Il tag del core viene dal
+binario, non da una costante riscritta a mano.
+
+#### Altri tre difetti, tutti visti guardando l'app
+
+- **I `Picker` non mostravano la propria etichetta.** Fuori da un `Form` SwiftUI
+  rende il solo valore corrente: la schermata Impostazioni era un elenco di
+  parole senza sapere cosa regolassero. Risolto con `ChoiceRow`, che l'etichetta
+  la disegna
+- **Un predefinito cambiato non raggiungeva la schermata Cifra**, perché la
+  `TabView` costruisce il modello una volta sola: l'impostazione era salvata e
+  inerte. Ora si rileggono **a schermata ferma** — rileggerli sempre
+  sovrascriverebbe scelte fatte apposta per il file in corso
+- **Un identificatore su un contenitore si propaga ai discendenti**, e la
+  ricerca ne trovava più d'uno: va sul controllo vero
+
+#### Due trappole nei test, che valgono per il seguito
+
+- **La lingua del simulatore rendeva i test non deterministici**: verdi su una
+  macchina italiana, rossi altrove. Ora la lingua si fissa dall'argomento di
+  lancio. Il pulsante del **selettore di sistema** resta però nella lingua del
+  dispositivo, e si accettano le due lingue dell'upstream
+- **Il dominio degli argomenti ha la precedenza su `UserDefaults`**: con
+  `-appLanguage` impostato, una lingua scelta dentro l'app verrebbe letta
+  comunque come quella dell'argomento. Il test che cambia lingua è l'unico a non
+  usarlo, e raggiunge le schede per posizione
+- Le impostazioni **sopravvivono fra un'esecuzione e l'altra** nel contenitore
+  dell'app: un test che ne legge una deve prima azzerarla, o diventa verde o
+  rosso a seconda di cosa è girato prima
+
 #### Rinviato
 
 | Cosa | Dove |

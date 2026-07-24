@@ -6,20 +6,20 @@ import Foundation
 /// mappata dal codice, mai il campo `message` grezzo — è diagnostico e può
 /// contenere percorsi.
 ///
-/// **Stato M3:** stringhe inline. In M9 diventano lookup su
-/// `Localizable.strings`, usando le stesse chiavi del desktop
-/// (`ui/modules/i18n.js`) così che il confronto resti possibile. Le chiavi sono
-/// già indicate qui accanto a ogni caso.
+/// La chiave dell'upstream è annotata accanto a ogni caso. È l'unico punto in
+/// cui la corrispondenza con `ui/modules/i18n.js` è reale — le schermate di iOS
+/// sono altre — e serve a poter confrontare i due messaggi quando si dubita di
+/// uno dei due.
 enum ErrorPresenter {
 
-    static let unexpected = "Si è verificato un errore imprevisto."
+    static var unexpected: String { L.t("Something went wrong.") }
 
     static func message(for error: CrypteraError) -> String {
         switch error {
 
         // ─── Core ───────────────────────────────────────────────
         case .PasswordInvalid:              // err_password_invalid
-            return "Password o keyfile non corretti."
+            return L.t("Wrong password or keyfile.")
 
         case .HeaderAuthFailed:             // err_header_auth
             // ⚠️ Il desktop mostra qui "Il file potrebbe essere stato
@@ -34,62 +34,62 @@ enum ErrorPresenter {
             //
             // Non si rimappa il codice su PasswordInvalid: nasconderebbe le
             // manomissioni vere.
-            return "Password o keyfile non corretti, oppure il file è stato modificato."
+            return L.t("Wrong password or keyfile, or the file has been modified.")
 
         case .HeaderInvalid:                // err_header_invalid
-            return "Il file non è un archivio Cryptera valido."
+            return L.t("This is not a valid Cryptera file.")
 
         case .ParamsOutOfLimits:            // err_params_limits
-            return "I parametri del file sono fuori dai limiti consentiti."
+            return L.t("The file's parameters are outside the allowed limits.")
 
-        case .Truncated:                    // err_truncated
-            return "Il file è incompleto."
+        case .Truncated:                    // err_file_truncated
+            return L.t("The file is incomplete.")
 
         case .CorruptBeyondFec:             // err_corrupt_beyond_fec
-            return "Il file è danneggiato oltre la capacità di recupero."
+            return L.t("The file is damaged beyond what can be recovered.")
 
         case .IoError:                      // err_io
-            return "Errore di lettura o scrittura."
+            return L.t("Could not read or write the file.")
 
         case .Cancelled:                    // err_cancelled
-            return "Operazione annullata."
+            return L.t("Operation cancelled.")
 
         case .UnknownError:
             return unexpected
 
         // ─── Livello applicativo ────────────────────────────────
         case .PasswordRequired:             // err_password_required
-            return "Inserisci una password."
+            return L.t("Enter a password.")
 
         case .InputRequired:                // err_input_required
-            return "Seleziona un file o una cartella."
+            return L.t("Choose a file or folder.")
 
         case .OutputRequired:               // err_output_required
-            return "Scegli una destinazione."
+            return L.t("Choose a destination.")
 
         case .OutputExists:                 // err_output_exists
-            return "Esiste già un file con questo nome. Non verrà sovrascritto."
+            return L.t("A file with this name already exists. It will not be overwritten.")
 
         case .TarError:                     // err_tar
-            return "Non è stato possibile creare l'archivio."
+            return L.t("Could not create the archive.")
 
         case .ExtractError:                 // err_extract
-            return "Non è stato possibile estrarre l'archivio."
+            return L.t("Could not extract the archive.")
 
         // ─── Specifici iOS ──────────────────────────────────────
         case .AccessDenied:
-            return "Accesso al file negato. Riprova selezionandolo di nuovo."
+            return L.t("Access to the file was denied. Try selecting it again.")
 
         case .InsufficientStorage:
-            return "Spazio insufficiente per completare l'operazione."
+            return L.t("Not enough space to complete the operation.")
 
         case .DeviceLocked:
-            return "Il dispositivo si è bloccato durante l'operazione. Sbloccalo e riprova."
+            return L.t("The device locked during the operation. Unlock it and try again.")
 
         case .InsufficientMemory:
             // Non si abbassano i parametri di nascosto: cambierebbero la chiave
             // derivata, quindi il file (SPEC §11.2).
-            return "Questo dispositivo non ha memoria sufficiente per il profilo di sicurezza scelto."
+            return L.t("This device does not have enough memory for the chosen security profile.")
 
         case .Internal:
             // Il messaggio diagnostico resta fuori dalla UI.

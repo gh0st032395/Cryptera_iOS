@@ -28,11 +28,38 @@ final class EncryptModel {
     private(set) var keyfile: Selection?
 
     // ─── Opzioni ───────────────────────────────────────────────────
-    var payloadCompression: PayloadCompression = .zlib
-    var securityProfile: SecurityProfile = .standard
-    var integrityProfile: IntegrityProfile = .standard
+    //
+    // I valori iniziali arrivano dalle impostazioni: chi cifra sempre allo
+    // stesso modo non deve riaprire il pannello a ogni file.
+    var payloadCompression: PayloadCompression
+    var securityProfile: SecurityProfile
+    var integrityProfile: IntegrityProfile
     var hideFilename = false
     var enablePasswordCheck = true
+
+    init(defaults: EncryptionDefaults = .current) {
+        payloadCompression = defaults.payloadCompression
+        securityProfile = defaults.securityProfile
+        integrityProfile = defaults.integrityProfile
+    }
+
+    /// Rilegge i predefiniti, ma **solo a schermata ferma**.
+    ///
+    /// Il modello si costruisce una volta sola, quando la `TabView` crea la
+    /// schermata: senza questo, un predefinito cambiato nelle impostazioni non
+    /// arriverebbe mai a una schermata Cifra già esistente — l'impostazione
+    /// risulterebbe salvata e inerte.
+    ///
+    /// La condizione conta: rileggerli mentre c'è un file scelto o
+    /// un'operazione in corso sovrascriverebbe scelte fatte apposta per **quel**
+    /// file.
+    func refreshDefaultsIfIdle() {
+        guard input == nil, output == nil, !isRunning, password.isEmpty else { return }
+        let defaults = EncryptionDefaults.current
+        payloadCompression = defaults.payloadCompression
+        securityProfile = defaults.securityProfile
+        integrityProfile = defaults.integrityProfile
+    }
 
     // ─── Esecuzione ────────────────────────────────────────────────
     private(set) var isRunning = false
@@ -57,16 +84,17 @@ final class EncryptModel {
     /// Un unico punto: la vista mostra questo motivo accanto al pulsante
     /// disattivato, invece di lasciare l'utente a indovinare cosa manca.
     var blockingReason: String? {
-        if input == nil { return "Scegli un file da cifrare." }
-        if password.isEmpty { return "Inserisci una password." }
+        if input == nil { return L.t("Choose a file to encrypt.") }
+        if password.isEmpty { return L.t("Enter a password.") }
         // La stessa regola del desktop, che **impedisce** la cifratura e non si
-        // limita ad avvisare (`operations.js`, `handleEncrypt`).
-        if !strength.meetsEncryptionPolicy {
-            return "La password è troppo debole: servono almeno 10 caratteri e tipi diversi."
-        }
-        if !passwordsMatch { return "Le due password non coincidono." }
+        // limita ad avvisare (`operations.js`, `handleEncrypt`). Il messaggio
+        // distingue però quale delle due condizioni manca: "troppo debole" a chi
+        // ha scelto bene i caratteri e si è fermato a nove manderebbe a cercare
+        // il problema dove non è.
+        if let violation = strength.policyViolation { return violation }
+        if !passwordsMatch { return L.t("The two passwords do not match.") }
         if !securityProfileFitsMemory {
-            return "Questo dispositivo non ha memoria sufficiente per il profilo scelto."
+            return L.t("This device does not have enough memory for the chosen profile.")
         }
         return nil
     }

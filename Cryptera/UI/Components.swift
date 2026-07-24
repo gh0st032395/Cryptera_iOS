@@ -191,7 +191,7 @@ struct SecretField: View {
             // "Cifra". Va sul pulsante, non sull'icona, perché `buttonStyle`
             // applica comunque il tint all'etichetta.
             .tint(.secondary)
-            .accessibilityLabel(revealed ? "Nascondi la password" : "Mostra la password")
+            .accessibilityLabel(revealed ? L.t("Hide password") : L.t("Show password"))
         }
     }
 }
@@ -257,6 +257,35 @@ struct MetadataRow: View {
         .font(.subheadline)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(identifier ?? "")
+    }
+}
+
+/// Riga di scelta: etichetta a sinistra, valore selezionabile a destra.
+///
+/// Serve perché **fuori da un `Form` SwiftUI non mostra l'etichetta di un
+/// `Picker`**: resta visibile il solo valore corrente, e una schermata di
+/// impostazioni diventa un elenco di parole senza sapere cosa regolino. Qui
+/// l'etichetta è un `Text` vero e al picker si dice esplicitamente di nascondere
+/// la propria.
+struct ChoiceRow<Value: Hashable, Options: View>: View {
+    let label: String
+    @Binding var selection: Value
+    var identifier: String?
+    @ViewBuilder var options: Options
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.subheadline)
+            Spacer(minLength: Design.Space.m)
+            // L'identificatore va sul picker, non sulla riga: su un contenitore
+            // si propaga ai discendenti, e una ricerca per identificatore
+            // troverebbe più elementi invece di quello da toccare.
+            Picker(label, selection: $selection) { options }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .accessibilityIdentifier(identifier ?? "")
+        }
     }
 }
 
@@ -353,7 +382,7 @@ struct RunningPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Design.Space.m) {
             HStack {
-                Text(progress?.stage.displayName ?? "Avvio")
+                Text(progress?.stage.displayName ?? L.t("Starting"))
                     .font(.subheadline.weight(.medium))
                 Spacer()
                 if let fraction = progress?.fraction {
@@ -372,10 +401,10 @@ struct RunningPanel: View {
             }
 
             HStack(spacing: Design.Space.m) {
-                Button(paused ? "Riprendi" : "Pausa", action: onPause)
+                Button(paused ? L.t("Resume") : L.t("Pause"), action: onPause)
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("\(identifierPrefix).pause")
-                Button("Annulla", role: .destructive, action: onCancel)
+                Button(L.t("Cancel"), role: .destructive, action: onCancel)
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("\(identifierPrefix).cancel")
                 Spacer()

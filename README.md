@@ -11,7 +11,7 @@ Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 ## Stato
 
 🚧 **M5 completata** — l'app cifra e decifra file singoli, con un'interfaccia
-propria. La cifratura di cartelle arriva in M6.
+propria in inglese e italiano. La cifratura di cartelle arriva in M6.
 
 La roadmap completa è in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 La specifica di riferimento è in [`SPEC.md`](SPEC.md).
@@ -22,7 +22,7 @@ La specifica di riferimento è in [`SPEC.md`](SPEC.md).
 | M2 — XCFramework | ✅ **app verde su simulatore** |
 | M3 — Primo end-to-end (`verify`) | ✅ **48 test verdi, revisionata** |
 | M4 — Decrypt | ✅ **79 test verdi, verificata sul simulatore** |
-| M5 — Encrypt file | ✅ **103 test verdi, con design system anticipato da M9** |
+| M5 — Encrypt file | ✅ **117 test verdi, con design, impostazioni e localizzazione anticipati da M9** |
 | M6 — Encrypt cartella | ⬜ |
 | M7 — Round-trip incrociato (**gate di rilascio**) | ⬜ |
 | M8 — Batch + Audit | ⬜ |
@@ -104,6 +104,10 @@ xcodebuild test -project Cryptera.xcodeproj -scheme Cryptera \
 
 ./scripts/check-release-bundle.sh   # cosa finisce davvero in una build Release
 ```
+
+`check-localization.sh` verifica che ogni stringa passata a `L.t(...)` abbia una
+traduzione italiana: una chiave mancante non fallisce da sola, perché ricade
+sull'inglese — corretto in produzione, ma nasconde le dimenticanze.
 
 `check-release-bundle.sh` verifica sul `.app` prodotto che non contenga dati di
 test, bundle di test, né framework di rete (SPEC §12.4). Non è un XCTest perché

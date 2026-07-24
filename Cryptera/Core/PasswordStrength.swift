@@ -28,11 +28,11 @@ struct PasswordStrength: Equatable {
 
         var text: String {
             switch self {
-            case .tooShort: return "almeno 10 caratteri"
-            case .uppercase: return "una maiuscola"
-            case .lowercase: return "una minuscola"
-            case .number: return "un numero"
-            case .special: return "un simbolo"
+            case .tooShort: return L.t("at least 10 characters")
+            case .uppercase: return L.t("an uppercase letter")
+            case .lowercase: return L.t("a lowercase letter")
+            case .number: return L.t("a digit")
+            case .special: return L.t("a symbol")
             }
         }
     }
@@ -40,20 +40,43 @@ struct PasswordStrength: Equatable {
     /// `pwd_strength_*` dell'upstream.
     var label: String {
         switch level {
-        case 0: return "Molto debole"
-        case 1: return "Debole"
-        case 2: return "Media"
-        case 3: return "Robusta"
-        default: return "Molto robusta"
+        case 0: return L.t("Very weak")
+        case 1: return L.t("Weak")
+        case 2: return L.t("Medium")
+        case 3: return L.t("Strong")
+        default: return L.t("Very strong")
         }
     }
 
-    /// `pwd_feedback_*`: cosa aggiungere, o l'incoraggiamento se non serve nulla.
+    /// `pwd_feedback_*`: cosa manca, o l'incoraggiamento quando non manca nulla.
+    ///
+    /// L'incoraggiamento è subordinato alla **policy**, non al solo livello.
+    /// L'upstream lo lega al livello, e nella sua interfaccia funziona perché
+    /// mostra la violazione della policy solo al momento di cifrare: qui invece
+    /// barra e pulsante bloccato stanno sotto gli occhi insieme, e una password
+    /// di 9 caratteri con tipi misti arriva a livello 3 — quindi diceva
+    /// contemporaneamente "Va bene" e "troppo debole".
+    ///
+    /// La policy non cambia: cambia quale messaggio si mostra.
     var hint: String? {
-        if level >= 4 { return "Ottima scelta." }
-        if level >= 3 { return "Va bene." }
+        if meetsEncryptionPolicy {
+            return level >= 4 ? L.t("Great password") : L.t("Good password")
+        }
         guard !missing.isEmpty else { return nil }
-        return "Aggiungi: " + missing.map(\.text).joined(separator: ", ")
+        return L.t("Add:") + " " + missing.map(\.text).joined(separator: ", ")
+    }
+
+    /// Cosa impedisce di cifrare, o `nil` se la policy è soddisfatta.
+    ///
+    /// Distingue le due condizioni invece di dire "troppo debole" anche a chi ha
+    /// scelto bene i caratteri e si è fermato a nove: quel messaggio manda a
+    /// cercare il problema dove non è.
+    var policyViolation: String? {
+        guard !meetsEncryptionPolicy else { return nil }
+        if length < 10 {
+            return L.t("The password must be at least 10 characters long.")
+        }
+        return L.t("The password is too simple: mix uppercase, lowercase, digits and symbols.")
     }
 
     /// La policy di cifratura del desktop: almeno 10 caratteri **e** livello

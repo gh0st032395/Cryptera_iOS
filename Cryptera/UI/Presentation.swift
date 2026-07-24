@@ -9,11 +9,11 @@ extension OperationStage {
     /// invece di mostrare l'identificatore grezzo.
     var displayName: String {
         switch self {
-        case .archiving: return "Creazione archivio"
-        case .encrypting: return "Cifratura"
-        case .decrypting: return "Decifratura"
-        case .verifying: return "Verifica"
-        case .unknown: return "Operazione in corso"
+        case .archiving: return L.t("Building archive")
+        case .encrypting: return L.t("Encrypting")
+        case .decrypting: return L.t("Decrypting")
+        case .verifying: return L.t("Verifying")
+        case .unknown: return L.t("Working")
         }
     }
 }

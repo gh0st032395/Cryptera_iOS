@@ -22,6 +22,9 @@ final class EncryptFlowUITests: XCTestCase {
         app.launchArguments = [
             "-cifra-fixture", "v4-basic",
             "-irreversibilityAcknowledged", acknowledged ? "YES" : "NO",
+            // La lingua dell'app è fissata: senza, le asserzioni sui messaggi
+            // dipenderebbero dalla lingua del simulatore.
+            "-appLanguage", "english",
         ]
         app.launch()
         return app
@@ -45,7 +48,7 @@ final class EncryptFlowUITests: XCTestCase {
         XCTAssertFalse(app.buttons["encrypt.run"].isEnabled)
         let motivo = element(app, "encrypt.blockingReason")
         XCTAssertTrue(motivo.waitForExistence(timeout: 5))
-        XCTAssertTrue(motivo.label.contains("debole"), "ottenuto: \(motivo.label)")
+        XCTAssertTrue(motivo.label.contains("10 characters"), "ottenuto: \(motivo.label)")
     }
 
     func testLAvvisoDiIrreversibilitaPrecedeLaPrimaCifratura() {
@@ -69,10 +72,10 @@ final class EncryptFlowUITests: XCTestCase {
             "la prima cifratura deve avvertire che non esiste recupero password"
         )
         XCTAssertTrue(
-            avviso.staticTexts.allElementsBoundByIndex.contains { $0.label.contains("irrecuperabili") },
+            avviso.staticTexts.allElementsBoundByIndex.contains { $0.label.contains("gone for good") },
             "l'avviso deve dire cosa si perde, non solo che c'è un rischio"
         )
-        avviso.buttons["Ho capito, cifra"].tap()
+        avviso.buttons["I understand, encrypt"].tap()
 
         XCTAssertTrue(
             element(app, "encrypt.outcome.success").waitForExistence(timeout: 90),

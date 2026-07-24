@@ -20,7 +20,7 @@ struct VerifyView: View {
                 }
                 if let outcome = model.outcome { outcomeCard(outcome) }
             }
-            .navigationTitle("Verifica")
+            .navigationTitle(L.t("Verify"))
         }
         // ⚠️ I due `.fileImporter` stanno ciascuno sulla card che lo apre, non
         // qui: due modificatori di presentazione dello stesso tipo sulla stessa
@@ -28,19 +28,19 @@ struct VerifyView: View {
     }
 
     private var inputCard: some View {
-        Card(title: "File cifrato", footnote: "La verifica non scrive nulla su disco.") {
+        Card(title: L.t("Encrypted file"), footnote: L.t("Verifying writes nothing to disk.")) {
             if let input = model.input {
                 FileTile(
                     name: input.lastPathComponent,
                     systemImage: "lock.doc",
-                    changeTitle: "Cambia",
+                    changeTitle: L.t("Change"),
                     onChange: { choosingInput = true }
                 )
                 .accessibilityIdentifier("verify.input")
             } else {
                 FilePlaceholder(
-                    title: "Scegli un file .ecf",
-                    subtitle: "Ne controlla l'integrità senza decifrarlo su disco",
+                    title: L.t("Choose an .ecf file"),
+                    subtitle: L.t("Checks its integrity without writing it out"),
                     systemImage: "checkmark.shield",
                     action: { choosingInput = true }
                 )
@@ -53,22 +53,22 @@ struct VerifyView: View {
     }
 
     private var passwordCard: some View {
-        Card(title: "Password") {
-            SecretField(title: "Password", text: $model.password, identifier: "verify.password")
+        Card(title: L.t("Password")) {
+            SecretField(title: L.t("Password"), text: $model.password, identifier: "verify.password")
 
             Divider()
 
             if let keyfile = model.keyfile {
                 FileTile(
                     name: keyfile.lastPathComponent,
-                    detail: "Keyfile",
+                    detail: L.t("Keyfile"),
                     systemImage: "key",
                     tint: Design.info,
-                    changeTitle: "Rimuovi",
+                    changeTitle: L.t("Remove"),
                     onChange: { model.clearKeyfile() }
                 )
             } else {
-                Button("Aggiungi un keyfile") { choosingKeyfile = true }
+                Button(L.t("Add a keyfile")) { choosingKeyfile = true }
                     .font(.subheadline.weight(.medium))
             }
         }
@@ -89,7 +89,7 @@ struct VerifyView: View {
                 )
             } else {
                 PrimaryButton(
-                    title: "Verifica",
+                    title: L.t("Verify"),
                     systemImage: "checkmark.shield",
                     enabled: model.canRun,
                     identifier: "verify.run"
@@ -104,21 +104,21 @@ struct VerifyView: View {
     private func outcomeCard(_ outcome: VerifyModel.Outcome) -> some View {
         switch outcome {
         case .success(let meta):
-            Card(title: "Risultato") {
+            Card(title: L.t("Result")) {
                 Notice(
                     kind: .success,
-                    text: "Il file è integro e la password è corretta.",
+                    text: L.t("The file is intact and the password is correct."),
                     identifier: "verify.outcome.success"
                 )
-                MetadataRow(label: "Formato", value: "ECF1 v\(meta.version)", monospaced: true)
-                MetadataRow(label: "Dimensione", value: SizeFormatter.string(meta.plainSize))
+                MetadataRow(label: L.t("Format"), value: "ECF1 v\(meta.version)", monospaced: true)
+                MetadataRow(label: L.t("Size"), value: SizeFormatter.string(meta.plainSize))
                 MetadataRow(
-                    label: "Recupero",
-                    value: "\(meta.r) blocchi ogni \(meta.k)"
+                    label: L.t("Recovery"),
+                    value: L.t("%d blocks per %d", Int(meta.r), Int(meta.k))
                 )
             }
         case .failure(let message):
-            Card(title: "Risultato") {
+            Card(title: L.t("Result")) {
                 Notice(kind: .danger, text: message, identifier: "verify.outcome.failure")
             }
         }
