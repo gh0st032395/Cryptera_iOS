@@ -867,7 +867,81 @@ confermato dai byte del desktop.
 
 ---
 
-### M8 — Batch + Audit
+### M8 — Batch + Audit ✅ COMPLETATA (2026-07-24)
+
+**Exit raggiunto:** coda di `.ecf` con password unica ed esecuzione sequenziale,
+registro operazioni JSONL persistente. **171 test verdi** (40 Rust, 106 XCTest,
+25 UI test).
+
+#### Batch: il difetto della 2.0.3 non c'era da riportare
+
+Il piano avverte di portare la logica della 2.0.4, che ispeziona l'header di
+ogni file per distinguere un `.ecf` singolo da un archivio TAR — la 2.0.3
+assumeva un container e falliva con `EXTRACT_ERROR` oppure `OUTPUT_EXISTS`.
+
+**Da noi quella distinzione è già dentro `decrypt` dal M4**: il crate controlla
+`FLAG_TAR_CONTAINER` e sceglie da sé se estrarre o spostare. Riscriverla in
+Swift sarebbe stata una seconda copia della stessa decisione, libera di
+divergere dalla prima.
+
+#### Scelte
+
+- **Sequenziale, non parallelo.** Ogni file deriva la propria chiave con Argon2,
+  che alloca fino a 512 MiB: due derivazioni insieme raddoppierebbero il picco, e
+  su iOS il superamento del limite jetsam non è un'eccezione ma la morte del
+  processo (SPEC §11.2)
+- **Un solo export alla fine.** I risultati finiscono in una cartella unica: su
+  iOS ogni salvataggio passa da un selettore di sistema, e presentarne uno per
+  file trasformerebbe un batch di venti file in venti interruzioni
+- **Un file rotto non ferma la coda** — se bastasse, tanto varrebbe farli uno
+  per uno
+- **Nomi uguali non si sovrascrivono** (SPEC §6.3): due `.ecf` diversi possono
+  contenere file con lo stesso nome
+
+#### Registro: due differenze rispetto all'upstream
+
+**1. Si registra il nome, non il percorso.** Su iOS un percorso contiene
+identificatori del container e punti di mount dei file provider: non dice nulla
+a chi legge e lascia un'impronta di dove l'utente tiene le sue cose. È anche lo
+spirito di SPEC §12.3. Un test verifica che nessun percorso finisca nel file.
+
+**2. C'è un interruttore, acceso di serie.** L'upstream registra sempre, senza
+opzione. Un telefono però si perde, e un registro persistente di cosa si è
+cifrato è un dato sensibile a sé. Il comportamento predefinito resta quello del
+desktop.
+
+Il file nasce **già** con Data Protection `.complete`, come chiede il piano:
+applicarla dopo la creazione lascerebbe una finestra in cui esiste senza. A
+dispositivo bloccato il registro non è scrivibile, il che non è un limite —
+a dispositivo bloccato non ci sono operazioni da registrare.
+
+**Uno storico volatile separato non esiste.** L'upstream ne tiene uno da 100
+voci in memoria *oltre* al registro su file; qui la schermata Attività legge il
+registro. Due elenchi della stessa cosa sarebbero due posti dove cercare la
+stessa risposta — e con l'interruttore spento lo storico volatile registrerebbe
+comunque, vanificando l'interruttore.
+
+Nel registro va il **codice** stabile dell'errore, mai il messaggio: i codici di
+§10.1 non cambiano e non sono localizzati, quindi un registro vecchio resta
+leggibile e confrontabile con quello del desktop. Il messaggio localizzato resta
+nelle schermate operative (§10.3).
+
+#### Tre difetti trovati dai test
+
+- **Il rinomino del batch aggiungeva " 2" al nome** quando il nome originale
+  coincideva con quello di lavoro: `uniqueURL` trovava occupato **il file
+  stesso**. Ogni file il cui nome interno coincide col nome del `.ecf` ne era
+  colpito, cioè il caso normale
+- **Un test raggiungeva le impostazioni per indice di scheda**, e la scheda
+  Batch ha spostato tutto. Ora si lega all'**ultima** scheda, che è una
+  proprietà stabile del layout
+- **Lo script di localizzazione non vedeva le chiamate su più righe**, e
+  segnalava come inutilizzata una chiave che era in uso. Corretto lo script, non
+  il codice
+
+---
+
+### M8 — dettaglio originale del piano
 
 - Batch: lista con stato per-file, password unica, esecuzione sequenziale (rif. `ui/modules/batch.js`). **Portare la logica di v2.0.4**, che ispeziona l'header di ogni file e distingue `.ecf` singolo da archivio TAR — la 2.0.3 assumeva un container e falliva con `EXTRACT_ERROR`/`OUTPUT_EXISTS` sui file singoli
 - Audit log JSONL nel container app (rif. `src-tauri/src/audit.rs`), protezione file `.complete`

@@ -22,6 +22,7 @@ final class AppRouter {
         case encrypt
         case decrypt
         case verify
+        case batch
         case settings
     }
 
@@ -62,6 +63,10 @@ struct RootView: View {
             VerifyView()
                 .tabItem { Label(L.t("Verify"), systemImage: "checkmark.shield") }
                 .tag(AppRouter.Tab.verify)
+
+            BatchView()
+                .tabItem { Label(L.t("Batch"), systemImage: "square.stack.3d.up") }
+                .tag(AppRouter.Tab.batch)
 
             SettingsView()
                 .tabItem { Label(L.t("Settings"), systemImage: "gearshape") }

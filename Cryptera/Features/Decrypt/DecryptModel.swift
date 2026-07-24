@@ -161,10 +161,14 @@ final class DecryptModel {
         let keyfileURL = keyfile?.url
 
         do {
-            let meta = try await FileAccess.withSecurityScope(
-                input: inputURL,
-                keyfile: keyfileURL
-            ) { inputPath, keyfilePath in
+            let meta = try await AuditLog.shared.measure(
+                op: "decrypt",
+                file: input.name
+            ) {
+                try await FileAccess.withSecurityScope(
+                    input: inputURL,
+                    keyfile: keyfileURL
+                ) { inputPath, keyfilePath in
                 try await CrypteraEngine.shared.decrypt(
                     DecryptRequest(
                         inputPath: inputPath,
@@ -181,8 +185,9 @@ final class DecryptModel {
                         // Il callback arriva da un thread Rust: hop sul main
                         // actor prima di toccare stato osservabile (SPEC §7).
                         Task { @MainActor in self?.progress = update }
-                    }
-                )
+                        }
+                    )
+                }
             }
             output = finalize(meta: meta, at: destination, extracted: extract, in: workspace)
         } catch let error as CrypteraError {

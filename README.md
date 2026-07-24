@@ -15,7 +15,7 @@ dall'**applicazione desktop 2.0.4** vengono letti dal codice iOS con confronto
 byte per byte, a ogni esecuzione dei test. E un file cifrato dall'iPhone è stato
 decifrato dal desktop, verificato a mano.
 
-L'app cifra e decifra file e cartelle, in inglese e italiano.
+L'app cifra e decifra file e cartelle, anche in blocco, con registro delle operazioni, in inglese e italiano.
 
 La roadmap completa è in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
 La specifica di riferimento è in [`SPEC.md`](SPEC.md).
@@ -29,7 +29,7 @@ La specifica di riferimento è in [`SPEC.md`](SPEC.md).
 | M5 — Encrypt file | ✅ **121 test verdi, provata su iPhone; design, impostazioni e localizzazione anticipati da M9** |
 | M6 — Encrypt cartella | ✅ **134 test verdi, con verifica dello spazio** |
 | M7 — Round-trip incrociato (**gate di rilascio**) | ✅ **149 test verdi; 8 file del desktop letti byte per byte** |
-| M8 — Batch + Audit | ⬜ |
+| M8 — Batch + Audit | ✅ **171 test verdi** |
 | M9 — Design system | ⬜ |
 | M10 — Hardening | ⬜ |
 | M11 — Distribuzione TestFlight | ⬜ |

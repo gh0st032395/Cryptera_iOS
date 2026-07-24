@@ -33,8 +33,13 @@ final class SettingsUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        let settingsTab = app.tabBars.buttons.element(boundBy: 3)
-        XCTAssertTrue(settingsTab.waitForExistence(timeout: 15), "scheda impostazioni assente")
+        // **L'ultima** scheda, non la quarta: legarsi a un indice fisso ha già
+        // rotto questo test una volta, quando è stata aggiunta la scheda Batch.
+        // "Impostazioni è in fondo" è invece una proprietà stabile del layout.
+        let tabs = app.tabBars.buttons
+        XCTAssertTrue(tabs.firstMatch.waitForExistence(timeout: 15), "barra delle schede assente")
+        let settingsTab = tabs.element(boundBy: tabs.count - 1)
+        XCTAssertTrue(settingsTab.exists, "scheda impostazioni assente")
         settingsTab.tap()
 
         let language = app.descendants(matching: .any)["settings.language"]

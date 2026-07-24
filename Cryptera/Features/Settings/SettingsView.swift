@@ -15,6 +15,7 @@ struct SettingsView: View {
     @AppStorage(PreferenceKey.payloadCompression) private var payloadCompression =
         EncryptionDefaults.builtIn.payloadCompression.storageValue
     @AppStorage(PreferenceKey.irreversibilityAcknowledged) private var acknowledged = false
+    @AppStorage(PreferenceKey.auditEnabled) private var auditEnabled = true
 
     @State private var coreVersion = "…"
 
@@ -24,6 +25,7 @@ struct SettingsView: View {
                 appearanceCard
                 defaultsCard
                 warningsCard
+                activityCard
                 aboutCard
             }
             .navigationTitle(L.t("Settings"))
@@ -79,6 +81,24 @@ struct SettingsView: View {
                     Text(option.label).tag(option.storageValue)
                 }
             }
+        }
+    }
+
+    // MARK: - Registro
+
+    private var activityCard: some View {
+        Card(
+            title: L.t("Activity"),
+            footnote: L.t("The log stays on this device and records only the file name, never its location.")
+        ) {
+            Toggle(L.t("Record operations"), isOn: $auditEnabled)
+                .accessibilityIdentifier("settings.audit")
+
+            Divider()
+
+            NavigationLink(L.t("View the log")) { AuditLogView() }
+                .font(.subheadline.weight(.medium))
+                .accessibilityIdentifier("settings.viewAudit")
         }
     }
 

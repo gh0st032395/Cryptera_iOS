@@ -217,10 +217,14 @@ final class VerifyModel {
         let keyfileURL = keyfile
 
         do {
-            let meta = try await FileAccess.withSecurityScope(
-                input: input,
-                keyfile: keyfileURL
-            ) { inputPath, keyfilePath in
+            let meta = try await AuditLog.shared.measure(
+                op: "verify",
+                file: input.lastPathComponent
+            ) {
+                try await FileAccess.withSecurityScope(
+                    input: input,
+                    keyfile: keyfileURL
+                ) { inputPath, keyfilePath in
                 try await CrypteraEngine.shared.verify(
                     VerifyRequest(
                         inputPath: inputPath,
@@ -232,8 +236,9 @@ final class VerifyModel {
                         // Il callback arriva da un thread Rust: hop sul main
                         // actor prima di toccare stato osservabile (SPEC §7).
                         Task { @MainActor in self?.progress = update }
-                    }
-                )
+                        }
+                    )
+                }
             }
             outcome = .success(meta)
         } catch let error as CrypteraError {

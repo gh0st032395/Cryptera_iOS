@@ -328,10 +328,15 @@ final class EncryptModel {
         )
 
         do {
-            let meta = try await FileAccess.withSecurityScope(
-                input: inputURL,
-                keyfile: keyfileURL
-            ) { inputPath, keyfilePath in
+            let meta = try await AuditLog.shared.measure(
+                op: "encrypt",
+                file: input.name,
+                bytes: input.size
+            ) {
+                try await FileAccess.withSecurityScope(
+                    input: inputURL,
+                    keyfile: keyfileURL
+                ) { inputPath, keyfilePath in
                 try await CrypteraEngine.shared.encrypt(
                     EncryptRequest(
                         source: isFolder ? .folder(path: inputPath) : .file(path: inputPath),
@@ -354,8 +359,9 @@ final class EncryptModel {
                         // Il callback arriva da un thread Rust: hop sul main
                         // actor prima di toccare stato osservabile (SPEC §7).
                         Task { @MainActor in self?.progress = update }
-                    }
-                )
+                        }
+                    )
+                }
             }
             output = Output(url: destination, meta: meta)
         } catch let error as CrypteraError {

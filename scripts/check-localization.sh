@@ -18,10 +18,15 @@ cd "$ROOT"
 [[ -f "$STRINGS" ]] || { echo "ERRORE: $STRINGS assente" >&2; exit 1; }
 
 # Chiavi usate nel codice: primo argomento di L.t("...").
-# Le stringhe multilinea non sono ammesse in questa forma, quindi una singola
-# riga basta a catturarle tutte.
-USED=$(grep -rhoE 'L\.t\("([^"\\]|\\.)*"' Cryptera --include='*.swift' \
-  | sed -E 's/^L\.t\("//; s/"$//' | sort -u)
+#
+# Le sorgenti si appiattiscono su una riga sola prima di cercare: una chiamata
+# con argomenti su più righe — `L.t(\n  "chiave", …)` — è comune quando la
+# stringa è lunga, e cercandola riga per riga risulterebbe "non usata" pur
+# essendo nel codice.
+USED=$(cat $(find Cryptera -name '*.swift') \
+  | tr '\n' ' ' \
+  | grep -oE 'L\.t\( *"([^"\\]|\\.)*"' \
+  | sed -E 's/^L\.t\( *"//; s/"$//' | sort -u)
 
 # Chiavi tradotte: la parte a sinistra dell'uguale.
 TRANSLATED=$(grep -E '^"' "$STRINGS" | sed -E 's/^"((\\.|[^"\\])*)".*/\1/' | sort -u)

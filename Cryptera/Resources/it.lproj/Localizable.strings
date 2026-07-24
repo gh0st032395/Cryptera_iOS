@@ -198,3 +198,30 @@
 "Gzip (fast)" = "Gzip (veloce)";
 "Bzip2 (ratio)" = "Bzip2 (rapporto)";
 "XZ (best)" = "XZ (massima)";
+
+// MARK: - Batch e registro (M8)
+
+"Batch" = "Batch";                              // nav_batch
+"Queue" = "Coda";
+"Add .ecf files" = "Aggiungi file .ecf";
+"You can select several at once" = "Puoi sceglierne più di uno alla volta";
+"The files are processed one at a time, in order." = "I file vengono elaborati uno alla volta, in ordine.";
+"The same password is used for every file in the queue." = "La stessa password vale per tutti i file in coda.";
+"Remove from queue" = "Togli dalla coda";
+"Decrypt all" = "Decifra tutti";
+"%d of %d" = "%1$d di %2$d";
+"%d succeeded, %d failed — %@" = "%1$d riusciti, %2$d falliti — %3$@";  // batch_summary_ok / batch_summary_err
+"less than a second" = "meno di un secondo";
+"Delete the decrypted copies" = "Elimina le copie in chiaro";
+"The decrypted files have not been saved yet. They will be deleted." = "I file decifrati non sono ancora stati salvati. Verranno eliminati.";
+
+"Activity" = "Attività";
+"Record operations" = "Registra le operazioni";
+"View the log" = "Vedi il registro";
+"The log stays on this device and records only the file name, never its location." = "Il registro resta su questo dispositivo e annota solo il nome del file, mai dove si trova.";
+"Recent operations" = "Operazioni recenti";
+"Only the file name is recorded, never its location." = "Viene annotato solo il nome del file, mai dove si trova.";
+"No operations recorded yet." = "Nessuna operazione registrata.";
+"Clear the log" = "Svuota il registro";
+"Clear the log?" = "Svuotare il registro?";
+"Clear" = "Svuota";

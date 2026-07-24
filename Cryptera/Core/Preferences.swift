@@ -69,6 +69,7 @@ enum PreferenceKey {
     static let payloadCompression = "defaultPayloadCompression"
     static let archiveCompression = "defaultArchiveCompression"
     static let irreversibilityAcknowledged = "irreversibilityAcknowledged"
+    static let auditEnabled = "auditEnabled"
 }
 
 /// Valori iniziali della schermata Cifra.
