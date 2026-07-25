@@ -389,13 +389,6 @@ pub fn decrypt(
             return Ok(meta);
         }
 
-        // La compressione si deduce dal nome memorizzato nell'header, ma il
-        // nome **non diventa mai un percorso**: è dato scelto da chi ha creato
-        // il file, e `Path::join` con un nome assoluto sostituirebbe la base,
-        // scrivendo fuori dalla destinazione. Il payload resta dov'è e la
-        // compressione viaggia come parametro.
-        let comp = orchestration::archive_compression_from_name(&meta.filename);
-
         // ⚠️ Comportamento noto, allineato all'upstream: l'estrazione **sovrascrive**
         // i file già presenti nella destinazione, mentre SPEC §6.3 vieta di
         // sovrascrivere in silenzio. La regola è pensata per l'output di un
@@ -404,11 +397,17 @@ pub fn decrypt(
         // ed è una scelta di prodotto, non di implementazione. Va risolta nella
         // UI di M4/M8, non cambiata qui di nascosto divergendo dal desktop.
         std::fs::create_dir_all(&request.output_path).map_err(|_| CrypteraError::IoError)?;
-        orchestration::safe_extract_tar(&payload_str, &request.output_path, comp)?;
+        orchestration::safe_extract_tar(&payload_str, &request.output_path)?;
 
         if request.keep_archive {
+            // Col nome nascosto non c'è niente da recuperare dall'header: il
+            // fallback prende il suffisso dalla compressione **reale**, letta
+            // dai byte, così un archivio gzip non finisce chiamato
+            // `decrypted.tar` — un nome che mentirebbe a chi poi prova ad
+            // aprirlo (fix upstream 2.1.1).
             let name = if meta.filename.is_empty() {
-                "decrypted.tar".to_string()
+                let comp = orchestration::detect_archive_comp(Path::new(&payload_str))?;
+                format!("decrypted{}", comp.suffix())
             } else {
                 orchestration::safe_archive_basename(&meta.filename)
             };
@@ -1080,56 +1079,129 @@ mod tests {
         assert_eq!(safe("normale.tar"), "normale.tar");
     }
 
+    /// Cartella cifrata e ridecifrata, per ogni combinazione di compressione e
+    /// nome nascosto.
+    ///
+    /// La matrice esiste perché il difetto stava **solo** nella diagonale
+    /// compresso × nome-nascosto: con il nome in chiaro il suffisso salvava la
+    /// deduzione, e senza compressione il decoder "tar semplice" era quello
+    /// giusto per caso. Tutti gli altri test passavano mentre l'app produceva
+    /// file che non sapeva riaprire — quindi il caso singolo non basta, serve
+    /// il prodotto cartesiano.
     #[test]
-    fn compressione_dedotta_dal_nome() {
-        use orchestration::archive_compression_from_name as comp;
-        assert_eq!(comp("x.tar.gz"), ArchiveCompression::Gzip);
-        assert_eq!(comp("x.TGZ"), ArchiveCompression::Gzip);
-        assert_eq!(comp("x.tar.bz2"), ArchiveCompression::Bzip2);
-        assert_eq!(comp("x.tar.xz"), ArchiveCompression::Xz);
-        assert_eq!(comp("x.tar"), ArchiveCompression::None);
-        // Il caso che rompe il desktop: file di lavoro senza estensione.
-        assert_eq!(comp(""), ArchiveCompression::None);
+    fn round_trip_cartella_per_ogni_compressione_e_nome_nascosto() {
+        for comp in [
+            ArchiveCompression::None,
+            ArchiveCompression::Gzip,
+            ArchiveCompression::Bzip2,
+            ArchiveCompression::Xz,
+        ] {
+            for hide in [false, true] {
+                let dir = tempfile::tempdir().unwrap();
+                let src = dir.path().join("dati");
+                std::fs::create_dir_all(src.join("sub")).unwrap();
+                std::fs::write(src.join("sub/f.txt"), b"contenuto").unwrap();
+
+                let ecf = dir.path().join("out.ecf");
+                encrypt(
+                    EncryptRequest {
+                        source: InputSource::Folder {
+                            path: src.to_string_lossy().to_string(),
+                        },
+                        output_path: ecf.to_string_lossy().to_string(),
+                        password: "password-di-prova".into(),
+                        keyfile_path: None,
+                        payload_compression: PayloadCompression::None,
+                        archive_compression: comp,
+                        skip_special_files: true,
+                        enable_password_check: true,
+                        hide_filename: hide,
+                        security_profile: SecurityProfile::Standard,
+                        integrity_profile: IntegrityProfile::Low,
+                    },
+                    None,
+                    None,
+                )
+                .unwrap_or_else(|e| panic!("{comp:?} hide={hide}: cifratura fallita con {e:?}"));
+
+                let out = dir.path().join("out");
+                decrypt(
+                    DecryptRequest {
+                        input_path: ecf.to_string_lossy().to_string(),
+                        output_path: out.to_string_lossy().to_string(),
+                        password: "password-di-prova".into(),
+                        keyfile_path: None,
+                        extract_archive: true,
+                        keep_archive: false,
+                    },
+                    None,
+                    None,
+                )
+                .unwrap_or_else(|e| panic!("{comp:?} hide={hide}: estrazione fallita con {e:?}"));
+
+                assert_eq!(
+                    std::fs::read(out.join("dati/sub/f.txt")).unwrap(),
+                    b"contenuto",
+                    "{comp:?} hide={hide}: contenuto diverso dopo il round-trip"
+                );
+            }
+        }
     }
 
-    /// Dimostra perché la compressione va passata esplicitamente.
-    ///
-    /// Il desktop decifra in un `NamedTempFile` (senza estensione) e passa quel
-    /// percorso a `safe_extract_tar`, che deduce la compressione dal suffisso:
-    /// un archivio gzip finisce quindi nel decoder "tar semplice" e
-    /// l'estrazione fallisce. Questo test blocca quel comportamento da noi.
+    /// Col nome nascosto l'archivio conservato prende il suffisso dalla
+    /// compressione reale: `decrypted.tar` su un gzip sarebbe un nome che mente.
     #[test]
-    fn archivio_compresso_si_estrae_anche_senza_estensione_nel_percorso() {
+    fn archivio_conservato_dichiara_la_compressione_vera() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("dati");
         std::fs::create_dir_all(&src).unwrap();
         std::fs::write(src.join("f.txt"), b"contenuto").unwrap();
 
-        let flags = ControlFlags::new();
-        let (tmp, nome) = orchestration::create_tar(
-            &src,
-            ArchiveCompression::Gzip,
-            true,
-            &flags,
+        let ecf = dir.path().join("out.ecf");
+        encrypt(
+            EncryptRequest {
+                source: InputSource::Folder {
+                    path: src.to_string_lossy().to_string(),
+                },
+                output_path: ecf.to_string_lossy().to_string(),
+                password: "password-di-prova".into(),
+                keyfile_path: None,
+                payload_compression: PayloadCompression::None,
+                archive_compression: ArchiveCompression::Gzip,
+                skip_special_files: true,
+                enable_password_check: true,
+                hide_filename: true,
+                security_profile: SecurityProfile::Standard,
+                integrity_profile: IntegrityProfile::Low,
+            },
+            None,
             None,
         )
-        .unwrap();
-        assert!(nome.ends_with(".tar.gz"));
-
-        // Percorso senza estensione, come il temporaneo del desktop.
-        let senza_estensione = dir.path().join("payload");
-        std::fs::copy(tmp.path(), &senza_estensione).unwrap();
+        .expect("cifratura riuscita");
 
         let out = dir.path().join("out");
-        std::fs::create_dir_all(&out).unwrap();
-        orchestration::safe_extract_tar(
-            senza_estensione.to_str().unwrap(),
-            out.to_str().unwrap(),
-            orchestration::archive_compression_from_name(&nome),
+        decrypt(
+            DecryptRequest {
+                input_path: ecf.to_string_lossy().to_string(),
+                output_path: out.to_string_lossy().to_string(),
+                password: "password-di-prova".into(),
+                keyfile_path: None,
+                extract_archive: true,
+                keep_archive: true,
+            },
+            None,
+            None,
         )
-        .expect("la compressione esplicita rende irrilevante il suffisso del percorso");
+        .expect("estrazione riuscita");
 
-        assert_eq!(std::fs::read(out.join("dati/f.txt")).unwrap(), b"contenuto");
+        assert!(
+            out.join("decrypted.tar.gz").exists(),
+            "atteso decrypted.tar.gz, presenti: {:?}",
+            std::fs::read_dir(&out)
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect::<Vec<_>>()
+        );
     }
 
     /// Annullare **durante** l'operazione, che è il caso reale.

@@ -941,6 +941,75 @@ nelle schermate operative (§10.3).
 
 ---
 
+### Allineamento col desktop 2.1.1 (2026-07-25)
+
+Il desktop è passato 2.0.4 → 2.1.0 → 2.1.1 mentre iOS era su M4–M8. Verifica di
+cosa andava portato, e di cosa no.
+
+**Il core non è cambiato.** `git diff v2.0.4..v2.1.1 -- src/` è vuoto: fra il
+pin di `cryptera-ffi` e l'ultima release del desktop è cambiato solo il numero
+di versione in `Cargo.toml`. Il formato `.ecf` è identico e il gate M7 non è
+toccato. Tutto il lavoro 2.1.x sta in `cli/`, `ops/`, `src-tauri/`, `ui/`.
+
+È il controllo da rifare a ogni allineamento: **il numero di versione non dice
+niente**: va guardato il diff di `src/`.
+
+| Novità del desktop | Esito |
+|---|---|
+| CLI `cryptera` (2.1.0) | Non applicabile — su iOS non c'è una CLI |
+| Crate condiviso `ops/` (2.1.0) | Non adottato — vedi sotto |
+| UI: nascondere i controlli del modo non attivo (2.1.0) | Già così: la UI nativa è guidata dal modo |
+| Sanificazione dei nomi container (2.1.0) | Già presente — `safe_basename` |
+| Nomi di device riservati Windows (2.1.1) | Non applicabile |
+| Bump `crossbeam-epoch` RUSTSEC-2026-0204 (2.1.1) | Già a 0.9.20 |
+| **Estrazione per magic bytes (2.1.1)** | **Portato** — vedi sotto |
+
+#### Il difetto: cartella compressa + nome nascosto
+
+`safe_extract_tar` prendeva la compressione come parametro esplicito, e il
+chiamante la deduceva dal **nome memorizzato nell'header**. Era già una
+correzione rispetto all'upstream, che la deduceva dal *percorso* e per questo
+non estraeva nulla dal temporaneo senza estensione — il difetto che il desktop
+ha poi corretto nella 2.1.1.
+
+Ma con `hide_filename` il nome nell'header è vuoto, quindi la deduzione dava
+`None` e un archivio gzip finiva nel decoder "tar semplice":
+
+```
+None  hide=false → ok        Gzip  hide=true → ExtractError
+None  hide=true  → ok        Bzip2 hide=true → ExtractError
+Gzip  hide=false → ok        Xz    hide=true → ExtractError
+```
+
+Entrambe le opzioni sono esposte nella schermata Encrypt, quindi **l'app
+produceva file che non sapeva riaprire**: cifratura senza errori, decifratura
+mai. Cancellato l'originale, su iOS i dati erano persi — mentre il desktop
+2.1.1 quegli stessi file li apre. Esattamente la divergenza che M7 esiste per
+impedire, con l'asimmetria dalla parte sbagliata.
+
+Portato il fix upstream: la compressione si deduce dai **magic bytes**
+(`1f8b` / `BZh` / `fd 37 7a 58 5a 00`), che ci sono sempre, e
+`archive_compression_from_name` è stata **rimossa** invece che lasciata
+inutilizzata — finché esiste, qualcuno la ricollega.
+
+Con `keep_archive` e nome nascosto il fallback era `decrypted.tar` anche su un
+gzip: ora il suffisso viene dalla compressione reale (`decrypted.tar.gz`), come
+nella 2.1.1. Un nome che mente su un archivio è un problema di chi dovrà
+aprirlo.
+
+Il test di regressione è il **prodotto cartesiano** compressione × nome
+nascosto, non il caso singolo: il difetto stava solo sulla diagonale, e ogni
+altra combinazione passava già.
+
+#### Perché `ops/` non è stato adottato
+
+Condividere il crate col desktop eliminerebbe la deriva, ma la versione iOS
+diverge deliberatamente — errori `CrypteraError` invece di `OpError`, e nessuna
+dipendenza dal filesystem del desktop. Il costo dell'adattamento supera il
+beneficio; si riallineano le singole funzioni quando serve, come qui.
+
+---
+
 ### M8 — dettaglio originale del piano
 
 - Batch: lista con stato per-file, password unica, esecuzione sequenziale (rif. `ui/modules/batch.js`). **Portare la logica di v2.0.4**, che ispeziona l'header di ogni file e distingue `.ecf` singolo da archivio TAR — la 2.0.3 assumeva un container e falliva con `EXTRACT_ERROR`/`OUTPUT_EXISTS` sui file singoli

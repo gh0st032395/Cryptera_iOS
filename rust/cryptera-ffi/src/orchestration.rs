@@ -120,6 +120,37 @@ impl ArchiveCompression {
             Self::Xz => ".tar.xz",
         }
     }
+
+    /// Deduce la compressione dai primi byte dell'archivio.
+    ///
+    /// I numeri magici cominciano con byte di controllo (`0x1f`, `0xfd`) o con
+    /// `BZh`, e nessuno di questi può iniziare il nome di una entry TAR — che
+    /// nel formato occupa i primi 100 byte del blocco. Un archivio non
+    /// compresso non viene quindi mai scambiato per compresso.
+    pub(crate) fn sniff(prefix: &[u8]) -> Self {
+        if prefix.starts_with(&[0x1f, 0x8b]) {
+            Self::Gzip
+        } else if prefix.starts_with(b"BZh") {
+            Self::Bzip2
+        } else if prefix.starts_with(&[0xfd, b'7', b'z', b'X', b'Z', 0x00]) {
+            Self::Xz
+        } else {
+            Self::None
+        }
+    }
+}
+
+/// Legge l'inizio del file e ne deduce la compressione. Sei byte bastano per
+/// tutti e tre i formati.
+pub(crate) fn detect_archive_comp(path: &Path) -> Result<ArchiveCompression, CrypteraError> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path).map_err(|_| CrypteraError::IoError)?;
+    let mut buf = [0u8; 6];
+    // Un file più corto di sei byte non è un archivio valido, ma qui non è
+    // questo il posto per dirlo: `sniff` risponde `None` e sarà l'estrazione a
+    // fallire con l'errore giusto.
+    let n = f.read(&mut buf).map_err(|_| CrypteraError::IoError)?;
+    Ok(ArchiveCompression::sniff(&buf[..n]))
 }
 
 // ─── TAR ───────────────────────────────────────────────────────────
@@ -228,24 +259,6 @@ pub(crate) fn create_tar(
     Ok((tmp, format!("{base_name}{}", comp.suffix())))
 }
 
-/// Deduce la compressione dell'archivio dal nome memorizzato nell'header.
-///
-/// **Solo ispezione di stringa.** Il nome viene da dentro il file cifrato:
-/// è scelto da chi l'ha creato e non deve *mai* diventare un percorso — vedi
-/// `safe_archive_basename`.
-pub(crate) fn archive_compression_from_name(name: &str) -> ArchiveCompression {
-    let lower = name.to_lowercase();
-    if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
-        ArchiveCompression::Gzip
-    } else if lower.ends_with(".tar.bz2") || lower.ends_with(".tbz2") {
-        ArchiveCompression::Bzip2
-    } else if lower.ends_with(".tar.xz") || lower.ends_with(".txz") {
-        ArchiveCompression::Xz
-    } else {
-        ArchiveCompression::None
-    }
-}
-
 /// Riduce il nome memorizzato nell'header a un nome di file innocuo.
 ///
 /// `Path::file_name()` scarta ogni componente di directory, quindi
@@ -277,17 +290,21 @@ pub(crate) fn safe_basename(name: &str, fallback: &str) -> String {
 /// La protezione contro lo **Zip Slip** è portata dall'upstream e non va
 /// rimossa: un archivio ostile con `../` scriverebbe altrove nel container.
 ///
-/// La compressione è un **parametro esplicito**, non dedotta dal suffisso del
-/// percorso come fa l'upstream. Quella deduzione ha due difetti: obbliga a
-/// costruire un percorso a partire da un nome non fidato, e fallisce quando il
-/// file di lavoro non ha estensione — che è esattamente il caso del
-/// `NamedTempFile` usato dal desktop.
-pub(crate) fn safe_extract_tar(
-    tar_path: &str,
-    out_dir: &str,
-    comp: ArchiveCompression,
-) -> Result<(), CrypteraError> {
+/// La compressione si deduce dai **byte dell'archivio**, mai da un nome.
+///
+/// Il codec di una cartella (gz/bz2/xz) non è registrato da nessuna parte
+/// nell'header `.ecf`: storicamente viveva solo nel suffisso del nome
+/// memorizzato. Dedurlo da lì ha due difetti — obbliga a costruire un percorso
+/// a partire da un nome non fidato, e soprattutto **non funziona quando quel
+/// nome non c'è**: col file di lavoro senza estensione (il `NamedTempFile` del
+/// desktop) oppure col nome nascosto in cifratura (`hide_filename`), l'archivio
+/// compresso finiva nel decoder "tar semplice" e l'estrazione falliva.
+///
+/// I byte invece ci sono sempre. Allineato al fix upstream 2.1.1
+/// (`ops::detect_archive_comp`).
+pub(crate) fn safe_extract_tar(tar_path: &str, out_dir: &str) -> Result<(), CrypteraError> {
     let out_dir = Path::new(out_dir).to_path_buf();
+    let comp = detect_archive_comp(Path::new(tar_path))?;
     let file = std::fs::File::open(tar_path).map_err(|_| CrypteraError::IoError)?;
 
     let decoder: Box<dyn std::io::Read> = match comp {
@@ -420,11 +437,7 @@ mod tests {
 
             let out = dir.path().join("out");
             std::fs::create_dir_all(&out).unwrap();
-            let r = safe_extract_tar(
-                tar_path.to_str().unwrap(),
-                out.to_str().unwrap(),
-                ArchiveCompression::None,
-            );
+            let r = safe_extract_tar(tar_path.to_str().unwrap(), out.to_str().unwrap());
             assert!(
                 matches!(r, Err(CrypteraError::ExtractError)),
                 "symlink verso {target} doveva essere rifiutato, ottenuto {r:?}"
@@ -451,12 +464,53 @@ mod tests {
 
         let out = dir.path().join("out");
         std::fs::create_dir_all(&out).unwrap();
-        safe_extract_tar(
-            tar_path.to_str().unwrap(),
-            out.to_str().unwrap(),
+        safe_extract_tar(tar_path.to_str().unwrap(), out.to_str().unwrap())
+            .expect("un link relativo interno è legittimo");
+    }
+
+    /// I numeri magici dei tre codec, più il caso "nessuna compressione".
+    #[test]
+    fn compressione_dedotta_dai_magic_bytes() {
+        use ArchiveCompression as C;
+        assert_eq!(C::sniff(&[0x1f, 0x8b, 0x08, 0x00]), C::Gzip);
+        assert_eq!(C::sniff(b"BZh9"), C::Bzip2);
+        assert_eq!(C::sniff(&[0xfd, b'7', b'z', b'X', b'Z', 0x00]), C::Xz);
+        // Un TAR non compresso inizia col nome della entry.
+        assert_eq!(C::sniff(b"dati/f"), C::None);
+        // Un prefisso troppo corto non deve andare in panico.
+        assert_eq!(C::sniff(&[]), C::None);
+        assert_eq!(C::sniff(&[0x1f]), C::None);
+    }
+
+    /// Il caso che rompeva il desktop e che qui restava scoperto col nome
+    /// nascosto: percorso **senza estensione**, archivio compresso.
+    #[test]
+    fn archivio_compresso_si_estrae_da_un_percorso_senza_estensione() {
+        for comp in [
+            ArchiveCompression::Gzip,
+            ArchiveCompression::Bzip2,
+            ArchiveCompression::Xz,
             ArchiveCompression::None,
-        )
-        .expect("un link relativo interno è legittimo");
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let src = dir.path().join("dati");
+            std::fs::create_dir_all(&src).unwrap();
+            std::fs::write(src.join("f.txt"), b"contenuto").unwrap();
+
+            let flags = ControlFlags::new();
+            let (tmp, _) = create_tar(&src, comp, true, &flags, None).unwrap();
+
+            // Nessun suffisso nel percorso: è il temporaneo di lavoro.
+            let senza_estensione = dir.path().join("payload");
+            std::fs::copy(tmp.path(), &senza_estensione).unwrap();
+
+            let out = dir.path().join("out");
+            std::fs::create_dir_all(&out).unwrap();
+            safe_extract_tar(senza_estensione.to_str().unwrap(), out.to_str().unwrap())
+                .unwrap_or_else(|e| panic!("{comp:?} doveva estrarsi, ottenuto {e:?}"));
+
+            assert_eq!(std::fs::read(out.join("dati/f.txt")).unwrap(), b"contenuto");
+        }
     }
 
     #[test]
