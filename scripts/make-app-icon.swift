@@ -112,49 +112,91 @@ func folderPath(x0: CGFloat, y0: CGFloat, w: CGFloat, h: CGFloat) -> CGPath {
     return p
 }
 
-func draw(_ ctx: CGContext) {
-    // Fondo: verde accento in gradiente, con un alone chiaro in alto a sinistra
-    // che dà profondità senza introdurre dettaglio (invisibile a 60 px, ma non
-    // dannoso).
-    fillLinear(ctx, path: nil, hex(0x3FD8A8), hex(0x199C78),
-               from: CGPoint(x: 0, y: 0), to: CGPoint(x: S, y: S))
-    radialGlow(ctx, center: CGPoint(x: S * 0.28, y: S * 0.22), radius: S * 0.70,
-               hex(0xFFFFFF, 0.20))
+/// Varianti richieste da iOS 18.
+///
+/// Il sistema non le ricava da solo: senza, l'icona chiara resta identica in
+/// modalità scura e in quella colorata, e in mezzo alle altre — che invece si
+/// adattano — è l'unica a stonare.
+enum Variant {
+    /// Icona predefinita.
+    case standard
+    /// Modalità scura: stesso glifo, fondo che non abbaglia sulla home scura.
+    case dark
+    /// Modalità colorata: il sistema applica **la tinta scelta dall'utente** a
+    /// un'immagine in scala di grigi, quindi qui si controlla solo la
+    /// luminosità. Il glifo deve restare chiaro sul fondo scuro, altrimenti a
+    /// tinta applicata sparisce.
+    case tinted
 
-    // Scudo scuro. Il contrasto scuro-su-verde è ciò che tiene l'icona leggibile
-    // alle dimensioni piccole: è il motivo per cui il glifo non è verde su verde.
+    var suffix: String {
+        switch self {
+        case .standard: return ""
+        case .dark: return "-Dark"
+        case .tinted: return "-Tinted"
+        }
+    }
+}
+
+func draw(_ ctx: CGContext, _ variant: Variant = .standard) {
+    // Fondo. La variante colorata è in scala di grigi perché la tinta la mette
+    // il sistema; quella scura tiene lo stesso verde ma spento, per non
+    // abbagliare su una home scura.
+    switch variant {
+    case .standard:
+        fillLinear(ctx, path: nil, hex(0x3FD8A8), hex(0x199C78),
+                   from: CGPoint(x: 0, y: 0), to: CGPoint(x: S, y: S))
+        radialGlow(ctx, center: CGPoint(x: S * 0.28, y: S * 0.22), radius: S * 0.70,
+                   hex(0xFFFFFF, 0.20))
+    case .dark:
+        fillLinear(ctx, path: nil, hex(0x18614A), hex(0x0A2E24),
+                   from: CGPoint(x: 0, y: 0), to: CGPoint(x: S, y: S))
+    case .tinted:
+        fillLinear(ctx, path: nil, hex(0x2A2A2A), hex(0x101010),
+                   from: CGPoint(x: 0, y: 0), to: CGPoint(x: S, y: S))
+    }
+
+    // Scudo. Nelle varianti standard e scura è scuro su verde; in quella
+    // colorata il rapporto si **inverte**, perché il sistema schiarisce
+    // l'immagine per applicare la tinta e uno scudo scuro sparirebbe.
     let shield = shieldPath(cx: S / 2, top: S * 0.175, w: S * 0.585, h: S * 0.655)
-    ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: S * 0.016), blur: S * 0.050,
-                  color: hex(0x06302A, 0.40))
-    ctx.addPath(shield); ctx.setFillColor(hex(0x16202B)); ctx.fillPath()
-    ctx.restoreGState()
-    fillLinear(ctx, path: shield, hex(0x22303F), hex(0x0E141B),
-               from: CGPoint(x: S * 0.25, y: S * 0.17), to: CGPoint(x: S * 0.78, y: S * 0.83))
+    switch variant {
+    case .standard, .dark:
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: S * 0.016), blur: S * 0.050,
+                      color: hex(0x06302A, 0.40))
+        ctx.addPath(shield); ctx.setFillColor(hex(0x16202B)); ctx.fillPath()
+        ctx.restoreGState()
+        fillLinear(ctx, path: shield, hex(0x22303F), hex(0x0E141B),
+                   from: CGPoint(x: S * 0.25, y: S * 0.17), to: CGPoint(x: S * 0.78, y: S * 0.83))
+    case .tinted:
+        ctx.addPath(shield); ctx.setFillColor(hex(0xD8D8D8)); ctx.fillPath()
+    }
 
     // Cartella. Una sola forma piena, nessuna linea sottile: è l'unica scelta
     // che resta nitida quando l'icona è ridotta a 60 px.
     let w = S * 0.265, h = S * 0.225
     ctx.addPath(folderPath(x0: S / 2 - w / 2, y0: S * 0.315, w: w, h: h))
-    ctx.setFillColor(hex(0x3FD8A8))
+    ctx.setFillColor(variant == .tinted ? hex(0x1A1A1A) : hex(0x3FD8A8))
     ctx.fillPath()
 }
 
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
-let outPath = "\(outDir)/AppIcon.png"
 
-let ctx = newContext()
-draw(ctx)
-guard let image = ctx.makeImage(),
-      let dest = CGImageDestinationCreateWithURL(
-        URL(fileURLWithPath: outPath) as CFURL, UTType.png.identifier as CFString, 1, nil)
-else {
-    FileHandle.standardError.write(Data("errore: impossibile creare \(outPath)\n".utf8))
-    exit(1)
+for variant in [Variant.standard, .dark, .tinted] {
+    let outPath = "\(outDir)/AppIcon\(variant.suffix).png"
+    let ctx = newContext()
+    draw(ctx, variant)
+    guard let image = ctx.makeImage(),
+          let dest = CGImageDestinationCreateWithURL(
+            URL(fileURLWithPath: outPath) as CFURL, UTType.png.identifier as CFString, 1, nil)
+    else {
+        FileHandle.standardError.write(Data("errore: impossibile creare \(outPath)\n".utf8))
+        exit(1)
+    }
+    CGImageDestinationAddImage(dest, image, nil)
+    guard CGImageDestinationFinalize(dest) else {
+        FileHandle.standardError.write(Data("errore: scrittura di \(outPath) fallita\n".utf8))
+        exit(1)
+    }
+    print("scritto \(outPath) (\(Int(S))×\(Int(S)), opaco)")
 }
-CGImageDestinationAddImage(dest, image, nil)
-guard CGImageDestinationFinalize(dest) else {
-    FileHandle.standardError.write(Data("errore: scrittura di \(outPath) fallita\n".utf8))
-    exit(1)
-}
-print("scritto \(outPath) (\(Int(S))×\(Int(S)), opaco)")

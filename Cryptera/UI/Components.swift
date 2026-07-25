@@ -63,6 +63,18 @@ struct ScreenScroll<Content: View>: View {
                 // incastrato sopra la barra delle tab quando il contenuto è
                 // appena più alto dello schermo.
                 .padding(.bottom, Design.Space.xl)
+                // Due `frame` di seguito, e servono entrambi: il primo limita
+                // la larghezza del contenuto, il secondo occupa lo spazio
+                // rimasto e decide dove appoggiare il primo.
+                //
+                // **A sinistra, non al centro.** Centrando, il contenuto non si
+                // allinea più al titolo grande della barra di navigazione, che
+                // resta al bordo e non è spostabile senza rifare
+                // l'instradamento: si ottiene un titolo e un contenuto su due
+                // assi diversi, che si legge come un difetto. Il vuoto a destra
+                // è asimmetrico ma coerente.
+                .frame(maxWidth: Design.maxContentWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollDismissesKeyboard(.interactively)
         }
@@ -103,9 +115,16 @@ struct FileTile: View {
             Spacer(minLength: Design.Space.s)
 
             if let onChange, let changeTitle {
+                // Stesso trattamento dei pulsanti di solo testo delle
+                // Impostazioni: alto quanto la sua riga, sarebbe sotto i 44
+                // punti. L'audit non lo segnala perché compare solo a file
+                // scelto, uno stato che il giro sulle schede non attraversa —
+                // ma il difetto è identico, e aspettare che un test lo veda
+                // significherebbe lasciarcelo.
                 Button(changeTitle, action: onChange)
                     .font(.subheadline.weight(.medium))
                     .buttonStyle(.borderless)
+                    .minimumHitTarget(alignment: .trailing)
             }
         }
         // Nome e dettaglio sono una cosa sola per VoiceOver: leggerli come due
@@ -273,11 +292,24 @@ struct ChoiceRow<Value: Hashable, Options: View>: View {
     var identifier: String?
     @ViewBuilder var options: Options
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
-        HStack {
+        // Ai corpi accessibili etichetta e valore non stanno più affiancati:
+        // in orizzontale l'etichetta cede lo spazio al menu e si tronca — e
+        // un'etichetta troncata rende la riga incomprensibile proprio a chi ha
+        // ingrandito il testo per riuscire a leggerla.
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Design.Space.s))
+            : AnyLayout(HStackLayout())
+
+        layout {
             Text(label)
                 .font(.subheadline)
-            Spacer(minLength: Design.Space.m)
+                // Manda a capo invece di troncare. Serve anche a corpo normale:
+                // con un valore lungo nel menu, l'etichetta si troncava già.
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
             // L'identificatore va sul picker, non sulla riga: su un contenitore
             // si propaga ai discendenti, e una ricerca per identificatore
             // troverebbe più elementi invece di quello da toccare.
@@ -365,7 +397,7 @@ struct PrimaryButton: View {
             (enabled ? Design.accent : Color(.tertiarySystemFill)),
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
-        .foregroundStyle(enabled ? Color.white : Color(.tertiaryLabel))
+        .foregroundStyle(enabled ? Design.onAccent : Color(.tertiaryLabel))
         .disabled(!enabled)
         .accessibilityIdentifier(identifier ?? "")
     }

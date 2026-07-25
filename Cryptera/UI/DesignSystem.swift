@@ -17,12 +17,34 @@ enum Design {
 
     /// Verde Cryptera: `--accent` dell'upstream, nelle due varianti di tema.
     ///
-    /// È il colore delle azioni e dello stato "riuscito". La variante chiara è
-    /// più satura perché su fondo bianco quella scura risulterebbe slavata —
-    /// è la stessa correzione che fa il desktop.
+    /// È il colore delle azioni e dello stato "riuscito".
+    ///
+    /// **La variante chiara è più scura di quella dell'upstream** (`#1AAB82`),
+    /// e non per gusto: misurata, faceva 2,9:1 sulle card e 2,6:1 sulla pagina,
+    /// sotto il 4,5:1 richiesto da WCAG AA per il testo. L'accento non è solo
+    /// decorativo — `.tint` lo rende il colore di ogni link e pulsante di
+    /// testo dell'app — quindi quel valore rendeva davvero meno leggibile
+    /// l'interfaccia su fondo chiaro. `#0D7A5C` arriva a 4,8:1 restando lo
+    /// stesso verde.
+    ///
+    /// Il desktop la correzione la fa già (`#35D0A1` → `#1AAB82`), solo non
+    /// abbastanza per un fondo chiaro come quello di iOS: là l'accento vive
+    /// quasi sempre su pannelli scuri. Le soglie sono verificate da
+    /// `DesignSystemContrastTests`.
     static let accent = Color(
-        light: Color(red: 0.102, green: 0.671, blue: 0.510),  // #1AAB82
+        light: Color(red: 0.051, green: 0.478, blue: 0.361),  // #0D7A5C
         dark: Color(red: 0.208, green: 0.816, blue: 0.631)    // #35D0A1
+    )
+
+    /// Colore da scrivere **sopra** un riempimento `accent`.
+    ///
+    /// Non è sempre bianco. Nel tema scuro l'accento è chiaro e brillante:
+    /// un'etichetta bianca sopra fa 2,0:1, cioè sparisce. È il difetto che
+    /// guardare solo il tema chiaro non fa vedere, ed è il motivo per cui
+    /// questo colore esiste invece di un `.white` scritto sul pulsante.
+    static let onAccent = Color(
+        light: .white,
+        dark: Color(red: 0.055, green: 0.078, blue: 0.106)    // #0E141B
     )
 
     /// Blu informativo (`--accent-2`): metadati, elementi neutri in evidenza.
@@ -65,6 +87,38 @@ enum Design {
     /// Raggio delle card. L'upstream usa 18; 16 è più vicino al raggio delle
     /// superfici raggruppate di iOS e non stona accanto a quelle di sistema.
     static let cornerRadius: CGFloat = 16
+
+    /// Larghezza massima del contenuto.
+    ///
+    /// Su iPhone non ha effetto — nessuno schermo ci arriva — e serve su iPad,
+    /// dove le card si stiravano per tutti i 1200 e più punti disponibili:
+    /// una riga con un'icona e due parole diventava larga quanto la finestra,
+    /// con il testo a sinistra e mezzo schermo vuoto a destra. Il limite non è
+    /// estetico: oltre una certa lunghezza di riga l'occhio perde il capo
+    /// successivo, ed è la stessa ragione per cui iOS ha una "readable width".
+    static let maxContentWidth: CGFloat = 700
+
+    /// Lato minimo di un'area toccabile (Human Interface Guidelines).
+    ///
+    /// Un controllo di solo testo è alto quanto la sua riga — una ventina di
+    /// punti — e resta difficile da colpire anche se si legge benissimo. Non è
+    /// un problema di aspetto e non si vede guardando l'app: si vede provando
+    /// a toccarlo, oppure con `performAccessibilityAudit()`, che è come è
+    /// saltato fuori.
+    static let minimumHitTarget: CGFloat = 44
+}
+
+extension View {
+    /// Porta l'area toccabile al minimo delle HIG senza cambiare la posizione
+    /// del testo.
+    ///
+    /// `contentShape` è la parte che conta: senza, l'area cresce ma i tocchi
+    /// nello spazio aggiunto continuano a non arrivare al controllo, e il
+    /// bersaglio resta grande come prima.
+    func minimumHitTarget(alignment: Alignment = .leading) -> some View {
+        frame(minHeight: Design.minimumHitTarget, alignment: alignment)
+            .contentShape(Rectangle())
+    }
 }
 
 // MARK: - Colore con varianti di tema

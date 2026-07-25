@@ -43,6 +43,21 @@ final class AppRouter {
     }
 }
 
+/// Applica lo stile a barra laterale dove il sistema lo supporta.
+///
+/// Esiste come modificatore separato perché `if #available` dentro il corpo di
+/// una vista cambierebbe il tipo dei due rami, e SwiftUI ricostruirebbe l'intero
+/// albero delle schede — buttando via il file scelto e la password digitata.
+private struct SidebarOnPad: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.tabViewStyle(.sidebarAdaptable)
+        } else {
+            content
+        }
+    }
+}
+
 /// Contenitore delle schermate.
 struct RootView: View {
     @State private var router = AppRouter()
@@ -72,6 +87,18 @@ struct RootView: View {
                 .tabItem { Label(L.t("Settings"), systemImage: "gearshape") }
                 .tag(AppRouter.Tab.settings)
         }
+        // Su iPad le schede diventano una barra laterale.
+        //
+        // Il piano indicava `NavigationSplitView`, che avrebbe voluto dire
+        // ricostruire l'instradamento attorno a una selezione e a un dettaglio;
+        // `.sidebarAdaptable` ottiene lo stesso risultato — barra in basso su
+        // iPhone, colonna laterale su iPad — lasciando le schermate come sono.
+        // Meno codice da mantenere per lo stesso esito visivo.
+        //
+        // Richiede iOS 18 mentre il minimo è 17: sotto, resta la barra delle
+        // schede, che su iPad è ammessa e funziona: si perde la colonna, non
+        // una funzione.
+        .modifier(SidebarOnPad())
         // Il verde di Cryptera diventa il colore delle azioni in tutta l'app,
         // barra delle tab compresa.
         .tint(Design.accent)

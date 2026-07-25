@@ -98,6 +98,7 @@ struct SettingsView: View {
 
             NavigationLink(L.t("View the log")) { AuditLogView() }
                 .font(.subheadline.weight(.medium))
+                .minimumHitTarget()
                 .accessibilityIdentifier("settings.viewAudit")
         }
     }
@@ -112,6 +113,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 Button(L.t("Show the warning again")) { acknowledged = false }
                     .font(.subheadline.weight(.medium))
+                    .minimumHitTarget()
                     .accessibilityIdentifier("settings.resetWarning")
             } else {
                 Text(L.t("The warning about unrecoverable passwords will appear before your next encryption."))

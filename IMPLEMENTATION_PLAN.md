@@ -1018,7 +1018,116 @@ beneficio; si riallineano le singole funzioni quando serve, come qui.
 
 ---
 
-### M9 — Design system
+### M9 — Design system ✅ COMPLETATA (2026-07-25)
+
+**Exit raggiunto:** Dynamic Type e VoiceOver verificati da un test su tutte le
+schermate, contrasto del design system misurato invece che valutato a occhio,
+barra laterale su iPad, icona con le tre apparenze di iOS 18.
+
+La base era già stata anticipata in M5 (colori dal desktop, card native,
+componenti condivisi) e la rifinitura post-M5 aveva chiuso tema selezionabile,
+i18n e schermata Impostazioni. Restava la parte dichiarata «obbligatoria» dal
+piano e mai verificata: Dynamic Type e VoiceOver.
+
+#### Il metodo: `performAccessibilityAudit()`, in tre configurazioni
+
+`CrypteraUITests/AccessibilityUITests` percorre tutte le schede e chiede a
+XCTest il controllo automatico di accessibilità. Gira in **inglese a corpo
+normale, inglese ad AX5 e italiano ad AX5**: le tre combinazioni non sono
+decorative — il rilievo «Text clipped» comparve una volta in inglese e **due in
+italiano**, perché le stesse schermate con stringhe più lunghe si tagliano
+prima. Provare solo la lingua sorgente avrebbe nascosto la seconda.
+
+#### Quattro difetti, nessuno visibile a corpo normale
+
+1. **Le righe di scelta troncavano l'etichetta.** `ChoiceRow` affiancava
+   etichetta e menu in un `HStack`, e l'etichetta cedeva lo spazio: ai corpi
+   accessibili spariva proprio per chi aveva ingrandito il testo per leggerla.
+   Ora il layout diventa verticale (`AnyLayout`) oltre la soglia accessibile, e
+   l'etichetta manda a capo invece di troncare — serviva **anche a corpo
+   normale**, con un valore lungo nel menu.
+
+2. **«Vedi il registro» era alto 18 punti**, contro i 44 delle HIG. Non è un
+   problema che si veda guardando l'app: si vede provando a toccarlo, o
+   chiedendolo all'audit. Aggiunto `minimumHitTarget()` al design system, con il
+   `contentShape` che serve perché l'area cresciuta riceva davvero i tocchi.
+
+3. **L'accento verde non era leggibile come testo su fondo chiaro.** `.tint`
+   lo rende il colore di ogni link e pulsante di testo dell'app, e il valore
+   dell'upstream faceva 2,9:1 sulle card e 2,6:1 sulla pagina — sotto il 4,5:1
+   di WCAG AA. Scurito a `#0D7A5C` (4,8:1) restando lo stesso verde. Il desktop
+   la correzione la fa già (`#35D0A1` → `#1AAB82`), solo non abbastanza per un
+   fondo chiaro: là l'accento vive quasi sempre su pannelli scuri.
+
+4. **Nel tema scuro l'etichetta bianca del pulsante principale faceva 1,96:1**,
+   cioè spariva. È il difetto che guardare il solo tema chiaro non fa vedere —
+   lì l'accento è scuro e il bianco funziona; nel tema scuro l'accento è chiaro
+   e brillante. Introdotto `Design.onAccent`, che sopra un riempimento accento
+   è bianco nel tema chiaro e quasi nero in quello scuro.
+
+#### Il contrasto si misura, non si valuta
+
+`DesignSystemContrastTests` calcola il rapporto WCAG 2.1 alla sorgente, in
+entrambi i temi, componendo l'alfa (i colori semantici di sistema non sono tinte
+piene: `secondaryLabel` è un nero al 60%, e ignorarne l'alfa dà un numero
+sbagliato e ottimista). È il posto dove i numeri esistono: l'audit dei UI test
+dice «fallisce» senza dire di quanto, e solo dove quel colore compare.
+
+**Le soglie seguono l'uso reale, non il tipo di colore.** In `Notice` i colori
+info/avviso/errore tingono l'icona e un fondo al 10%, mentre il testo resta
+primario: la soglia applicabile è quella degli elementi grafici (3:1). Averli
+misurati come testo avrebbe fatto scurire tre colori per un problema
+inesistente — la prima versione del test lo faceva, ed era il test a sbagliare.
+
+**`secondaryLabel` non è stato sostituito.** A contrasto normale sta sotto il
+4,5:1 (3,4:1 su card): è la gerarchia scelta da Apple per il testo di supporto,
+identica in ogni app di sistema. Il punto è che l'utente può alzarla: con
+"Aumenta contrasto" attivo i colori semantici si scuriscono da soli e superano
+la soglia — verificato dal test. Un grigio fisso nostro non reagirebbe, e
+darebbe un'app che *ignora* quell'impostazione invece di rispettarla.
+
+#### Due esclusioni nell'audit, ricavate sperimentalmente
+
+L'audit segnalava tre «Contrast failed» nelle Impostazioni, tutti sotto y≈960 —
+**fuori dallo schermo**, che è alto 874 punti. Portandoli in vista con uno
+scorrimento, due diventavano «nearly passed» e uno spariva: dentro una
+`ScrollView` il contenuto oltre il bordo esiste nell'albero ma non è disegnato,
+e il controllo del contrasto campiona i pixel. Il test ignora quindi gli
+elementi che non intersecano lo schermo, e «nearly passed», che è la gerarchia
+di sistema di cui sopra. Ogni altro rilievo lo fa fallire.
+
+L'esperimento è servito: aveva **smentito in parte** l'ipotesi iniziale.
+«Vedi il registro» falliva il contrasto anche una volta in vista — era un
+difetto vero — ed è emerso il rilievo sull'area toccabile, che da fuori schermo
+non compariva.
+
+#### iPad e icona
+
+- **Barra laterale.** `.tabViewStyle(.sidebarAdaptable)` invece del
+  `NavigationSplitView` previsto: stesso esito visivo — barra in basso su
+  iPhone, colonna laterale su iPad — senza ricostruire l'instradamento attorno
+  a selezione e dettaglio. Richiede iOS 18 mentre il minimo è 17; sotto resta la
+  barra delle schede, che su iPad funziona: si perde la colonna, non una
+  funzione.
+- **Larghezza leggibile.** Su iPad le card si stiravano per tutta la finestra:
+  una riga con un'icona e due parole larga 1200 punti. Limitate a 700, allineate
+  **a sinistra e non centrate** — centrandole non si allineavano più al titolo
+  grande della barra di navigazione, che resta al bordo, e due assi diversi si
+  leggono come un difetto.
+- **Icona in tre apparenze** (iOS 18): standard, scura e colorata. Nella
+  colorata il rapporto chiaro/scuro si **inverte**, perché il sistema schiarisce
+  l'immagine per applicare la tinta e uno scudo scuro sparirebbe.
+
+#### Rinviato
+
+| Cosa | Dove |
+|---|---|
+| Prova con VoiceOver realmente acceso, su device | M10 — l'audit automatico non la sostituisce |
+| Preflight memoria in decifratura | M10 |
+
+---
+
+### M9 — dettaglio originale del piano
 
 - **Non riprodurre la UI desktop.** Pattern nativi: `NavigationStack`, `Form`, `List` `.insetGrouped`, sheet per i picker. `TabView` su iPhone, `NavigationSplitView` su iPad
 - Tema Dark/Light/System via `.preferredColorScheme` + `@AppStorage`; colori desktop da `ui/styles.css` come riferimento cromatico, mappati su asset catalog con varianti
@@ -1068,16 +1177,23 @@ beneficio; si riallineano le singole funzioni quando serve, come qui.
 
 ## 5. Prossimo passo
 
-M1–M8 sono completate; M7 resta il gate di rilascio.
+M1–M9 sono completate; M7 resta il gate di rilascio.
 
-**Eseguire M9 — design system.** L'icona dell'applicazione è già in
-`Cryptera/Resources/Assets.xcassets/`, generata da `scripts/make-app-icon.swift`
-(scudo scuro su verde accento, cartella come glifo — **non** un buco di
-serratura, che leggeva come "gestore di password"). Restano da fare le varianti
-dark e tinted per iOS 18, che l'asset catalog oggi non ha.
+**Eseguire M10 — hardening.** La tabella della milestone è il piano; due voci
+arrivano da M9 e vanno tenute insieme al resto:
 
-Il resto di M9 è nella sezione della milestone. Poi M10 (hardening) e M11
-(distribuzione).
+- **VoiceOver acceso davvero, su device.** L'audit automatico di M9 copre
+  etichette, contrasto, testo tagliato e aree toccabili, ma non dice se
+  l'*ordine* di lettura ha senso, né se un'operazione lunga è seguibile senza
+  vedere lo schermo. Non è verificabile in simulatore.
+- **Preflight memoria in decifratura**, dove i parametri arrivano dall'header e
+  non sono negoziabili.
+
+Il resto di M10 — jetsam, Data Protection, background, privacy UI — richiede un
+**device reale**: il simulatore non ha i limiti di memoria e nasconde
+esattamente il problema del profilo Paranoid. Dipende quindi da **D4**
+(Apple Developer Program), che conviene sciogliere prima di iniziare, non a
+metà.
 
 ---
 
