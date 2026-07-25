@@ -46,6 +46,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.cryptera.ios
         INFOPLIST_FILE: Cryptera/Info.plist
         GENERATE_INFOPLIST_FILE: NO
+        # L'icona è generata da `scripts/make-app-icon.swift`, non disegnata a
+        # mano: senza questa chiave l'asset catalog verrebbe compilato ma
+        # l'icona non assegnata, e l'app mostrerebbe il segnaposto di sistema.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Header dell'FFI: i binding generati fanno `import cryptera_ffiFFI`,
         # che risolve tramite il module.modulemap dentro l'XCFramework.
         SWIFT_INCLUDE_PATHS: $(inherited)

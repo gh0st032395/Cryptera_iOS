@@ -1068,17 +1068,16 @@ beneficio; si riallineano le singole funzioni quando serve, come qui.
 
 ## 5. Prossimo passo
 
-**Eseguire M1.** Concretamente:
+M1–M8 sono completate; M7 resta il gate di rilascio.
 
-```bash
-rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
-```
+**Eseguire M9 — design system.** L'icona dell'applicazione è già in
+`Cryptera/Resources/Assets.xcassets/`, generata da `scripts/make-app-icon.swift`
+(scudo scuro su verde accento, cartella come glifo — **non** un buco di
+serratura, che leggeva come "gestore di password"). Restano da fare le varianti
+dark e tinted per iOS 18, che l'asset catalog oggi non ha.
 
-poi un crate minimo che dipende da `crypto_core_rs` a `v2.0.4` e
-`cargo build --release --target aarch64-apple-ios`, isolando l'esito di `xz2`.
-
-L'esito determina la matrice di parità funzionale (§9) e va scritto in
-`README.md` **prima** di procedere a M2.
+Il resto di M9 è nella sezione della milestone. Poi M10 (hardening) e M11
+(distribuzione).
 
 ---
 
