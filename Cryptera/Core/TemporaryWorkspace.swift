@@ -22,11 +22,31 @@ final class TemporaryWorkspace {
 
     let directory: URL
 
+    /// Classe di Data Protection della cartella di lavoro (SPEC §11.3).
+    ///
+    /// `.completeUnlessOpen` e non `.complete`: il contenuto è in chiaro e va
+    /// protetto a dispositivo bloccato, ma un'operazione lunga può essere in
+    /// corso proprio mentre lo schermo si spegne — con `.complete` la scrittura
+    /// già aperta fallirebbe a metà. Questa classe cifra il file a riposo e
+    /// lascia proseguire chi lo aveva già aperto.
+    ///
+    /// Non `.none` da nessuna parte, per nessun file.
+    static let protection: FileProtectionType = .completeUnlessOpen
+
     init() throws {
         directory = Self.root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        // La protezione si mette sulla **cartella**, non sui file.
+        //
+        // L'output lo crea il codice Rust attraverso `std::fs`, che di iOS non
+        // sa nulla e non può chiedere una classe di protezione. Impostarla dopo
+        // — a operazione conclusa — lascerebbe scoperto tutto il tempo in cui il
+        // file in chiaro esiste, che è esattamente la finestra da chiudere. I
+        // file creati dentro una cartella ereditano la sua classe, quindi
+        // metterla qui la applica anche a ciò che scrive Rust.
         try FileManager.default.createDirectory(
             at: directory,
-            withIntermediateDirectories: true
+            withIntermediateDirectories: true,
+            attributes: [.protectionKey: Self.protection]
         )
     }
 

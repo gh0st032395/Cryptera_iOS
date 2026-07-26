@@ -99,10 +99,10 @@ errore. In decifratura i parametri arrivano dall'header e non sono negoziabili.
 
 ## Protezione dei dati su iOS
 
-**Stato attuale — parziale.** L'hardening è la milestone M10, non ancora
-eseguita, e questa sezione distingue ciò che è implementato da ciò che non lo è.
-Un documento di sicurezza che descrive le intenzioni come se fossero fatti è
-peggio dell'assenza del documento.
+**Stato attuale — parziale.** L'hardening (milestone M10) è in corso: memoria,
+sospensione, Data Protection e copertura privacy sono fatti; il resto no. Questa
+sezione distingue le due cose, perché un documento di sicurezza che descrive le
+intenzioni come se fossero fatti è peggio dell'assenza del documento.
 
 Implementato:
 
@@ -112,24 +112,23 @@ Implementato:
 | Output decifrati di sessioni interrotte | Cancellati all'avvio successivo |
 | Memoria prima di avviare | Verificata con `os_proc_available_memory()`; il profilo viene rifiutato se non ci sta, mai abbassato in silenzio. Misurata su device: il modello predice il consumo reale al MiB |
 | Operazione interrotta da una sospensione | L'app chiede a iOS tempo aggiuntivo; alla scadenza **annulla** invece di lasciarsi sospendere a metà scrittura, così l'output parziale viene rimosso e non resta un `.ecf` troncato |
+| File di lavoro e temporanei | `.completeUnlessOpen` sulla cartella, ereditata dai file che vi crea il core. Non `.complete`: un'operazione in corso mentre lo schermo si spegne fallirebbe a metà |
+| Miniatura di sistema in secondo piano | Coperta da una schermata neutra a partire da `.inactive`, cioè prima che iOS la scatti: non vi compaiono nomi di file |
 
 **Non ancora implementato** (M10 — vedi
 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)):
 
 | Ambito | Stato |
 |---|---|
-| Data Protection sui file di lavoro e temporanei | Restano al valore predefinito del container; `.completeUnlessOpen` non è ancora impostata |
-| Overlay sullo snapshot di sistema in background | Assente — la miniatura salvata da iOS può contenere nomi di file |
 | `PrivacyInfo.xcprivacy` | Assente — va aggiunto prima della prima submission |
 | Preflight memoria in **decifratura** | Assente; in cifratura c'è |
 | Prova su device sotto Instruments (jetsam, tempi Argon2) | Non eseguita: il simulatore non ha i limiti di memoria |
 | Prova con VoiceOver realmente acceso | Non eseguita: l'audit automatico copre etichette e geometria, non l'ordine di lettura |
 
-La suite completa **è** stata eseguita su un iPhone 14 Pro (iOS 26.5.2), ed è
-verde. Quel giro ha però corretto un difetto che il simulatore non poteva
-mostrare — un controllo di appartenenza alla sandbox che rifiutava percorsi non
-ancora creati — quindi le voci qui sopra restano aperte: non sono state
-verificate, sono solo rimaste fuori da quel giro.
+La suite completa gira su un **iPhone 14 Pro (iOS 26.5.2)** ed è verde, e le
+classi di Data Protection sono verificate lì — in simulatore quei test saltano,
+perché il filesystem non riporta affatto la classe. Le voci qui sopra restano
+comunque aperte: non sono state verificate, sono rimaste fuori.
 
 Il codice errore `DEVICE_LOCKED` esiste ed è registrato nel log delle
 operazioni, ma non ha ancora un trattamento dedicato nell'interfaccia.

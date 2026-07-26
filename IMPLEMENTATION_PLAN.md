@@ -1289,6 +1289,60 @@ osservato accadere. Serve un device che non lo regga, e non ne abbiamo uno.
 
 ---
 
+### M10 punto 3 — Data Protection e copertura privacy (2026-07-26)
+
+#### La protezione va sulla cartella, non sui file
+
+`TemporaryWorkspace` crea la sua cartella con `.completeUnlessOpen`.
+
+**Non `.complete`**: il contenuto è in chiaro e va protetto a dispositivo
+bloccato, ma un'operazione lunga può essere in corso proprio mentre lo schermo
+si spegne — con `.complete` la scrittura già aperta fallirebbe a metà.
+
+**E non sui singoli file**, perché l'output lo crea il codice Rust attraverso
+`std::fs`, che di iOS non sa nulla e non può chiedere una classe di protezione.
+Impostarla dopo, a operazione conclusa, lascerebbe scoperto tutto il tempo in
+cui il file in chiaro esiste — che è esattamente la finestra da chiudere. È lo
+stesso principio già applicato al registro: *la protezione si applica alla
+creazione*.
+
+Il test che conta non è che l'attributo sia sulla cartella, ma che **un file
+creato dentro lo erediti** — scritto con `FileManager` e senza specificare
+alcuna protezione, cioè come fa Rust. Se non ereditasse, la protezione sarebbe
+scritta nel codice e assente dal disco.
+
+**Verificato su device**: cartella `.completeUnlessOpen`, file creato dentro
+`.completeUnlessOpen`, registro `.complete`. In simulatore i tre test
+**saltano**: il filesystem non riporta affatto la classe di protezione, quindi
+lì la verifica non è possibile — un altro caso in cui il device non è un lusso.
+
+#### La copertura si mette in `.inactive`, non in `.background`
+
+La miniatura che iOS conserva per il selettore delle app viene scattata mentre
+la scena è **`.inactive`**, cioè *prima* di `.background`. Coprire solo in
+background fotograferebbe la schermata scoperta, e non ce ne accorgeremmo mai:
+a quel punto l'app è già sparita dallo schermo.
+
+Non protegge un segreto crittografico — protegge i **nomi dei file**. Quella
+miniatura resta su disco e finisce nei backup, e una schermata di Cryptera
+mostra come si chiama ciò che l'utente sta cifrando, che per chi cifra è già
+l'informazione di troppo.
+
+Il glifo è una **cartella, non un lucchetto**: stessa ragione dell'icona: il
+lucchetto sposta la percezione verso i gestori di password.
+
+#### Cosa **non** è verificato
+
+Che iOS scatti davvero la miniatura mentre la copertura è su **non è
+osservabile da un test**: in quell'istante l'app non è più interrogabile. Il
+test unitario verifica la regola (*quando* si copre), quello UI il modo di
+fallire che rovinerebbe l'app a chiunque — una copertura che resta incastrata
+al ritorno in primo piano — e la resa visiva è stata guardata forzando la
+copertura e fotografando la schermata. Manca la prova d'insieme: mandare l'app
+in secondo piano e guardare la miniatura nel selettore, a mano.
+
+---
+
 ### M10 punto 2 — sospensione e checkpoint puliti (2026-07-26)
 
 `Cryptera/Core/OperationLifetime.swift` tiene l'app sveglia e viva per la

@@ -65,6 +65,8 @@ struct RootView: View {
     @AppStorage(PreferenceKey.language) private var language = AppLanguage.system.rawValue
     @AppStorage(PreferenceKey.theme) private var theme = AppTheme.system.rawValue
 
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some View {
         TabView(selection: $router.tab) {
             EncryptView(router: router)
@@ -113,6 +115,19 @@ struct RootView: View {
         // vista. Ricostruire l'albero è il modo diretto per farlo — succede una
         // volta, quando l'utente cambia lingua di proposito.
         .id(language)
+        // Copertura sopra **tutto**, barra delle schede compresa: sta dopo
+        // `.id(language)` perché un cambio di lingua non deve poterla smontare
+        // proprio mentre l'app sta passando in secondo piano.
+        //
+        // Senza animazione di proposito: una dissolvenza lascerebbe la
+        // schermata parzialmente visibile per qualche fotogramma, e la
+        // miniatura di sistema viene scattata esattamente lì.
+        .overlay {
+            if PrivacyCoverPolicy.shouldCover(scenePhase) {
+                PrivacyCover()
+                    .transition(.identity)
+            }
+        }
         .onOpenURL { router.open($0) }
         .task {
             // Prima di qualunque operazione: un output decifrato di una sessione
