@@ -21,7 +21,10 @@ Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 
 ## Stato
 
-🚧 **In sviluppo.** M1–M9 completate, M10 quasi; non ancora distribuita.
+✅ **M1–M10 completate.** L'app è funzionalmente completa e verificata su
+device. **Non è pubblicata, e pubblicarla è una decisione ancora da prendere**:
+i requisiti dell'App Store sono raccolti in M11 e restano sospesi finché quella
+decisione non arriva.
 
 **M7 — il gate di rilascio — è verde.** Otto file prodotti dall'applicazione
 desktop vengono letti dal codice iOS con confronto byte per byte a ogni
@@ -41,8 +44,9 @@ d'integrità e registro delle operazioni, in inglese e italiano, su iPhone e iPa
 | M7 — Round-trip incrociato (**gate di rilascio**) | ✅ 8 file del desktop letti byte per byte |
 | M8 — Batch + Audit | ✅ coda e registro delle operazioni |
 | M9 — Design system | ✅ accessibilità verificata, iPad, icona adattiva |
-| M10 — Hardening | 🔶 codice completo e verificato su device; resta la dichiarazione di export compliance |
-| M11 — Distribuzione TestFlight | ⬜ richiede Apple Developer Program |
+| M10 — Hardening | ✅ memoria misurata su device, Data Protection, privacy, VoiceOver provato |
+| M11 — Distribuzione | ⏸️ **sospesa** — solo se si decide di pubblicare |
+| M12 — Nota cifrata | 📋 progettata; una decisione aperta sul modello di minaccia |
 
 **197 test verdi**: 42 Rust, 128 XCTest, 27 UI test — su iPhone 14 Pro e in simulatore.
 
@@ -210,10 +214,11 @@ lettura, e quello si controlla solo ascoltando.
   desktop non è stato portato.
 - `PrivacyInfo.xcprivacy`: presente, dichiara nessun dato raccolto e nessun
   tracciamento. `check-release-bundle.sh` verifica che resti nel bundle.
-- `ITSAppUsesNonExemptEncryption`: **non ancora dichiarata.** È export
-  compliance, non implementazione: finché la posizione non è presa
-  nell'`Info.plist` resta un commento, perché una chiave sbagliata lì è peggio
-  di una chiave assente (SPEC §14.1).
+- `ITSAppUsesNonExemptEncryption`: **non dichiarata, e per ora non serve.** È
+  export compliance, richiesta alla prima submission: finché l'app non si
+  pubblica, nell'`Info.plist` resta un commento — una chiave sbagliata lì è
+  peggio di una assente. Le opzioni e la strada che si adatta al caso (sorgente
+  pubblico) sono in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md), M11.
 
 Limiti noti e modello di sicurezza in [`SECURITY.md`](SECURITY.md), incluso il
 punto in cui questo porting è più debole del desktop: la password in memoria non

@@ -99,10 +99,10 @@ errore. In decifratura i parametri arrivano dall'header e non sono negoziabili.
 
 ## Protezione dei dati su iOS
 
-**Stato attuale — parziale.** L'hardening (milestone M10) è in corso: memoria,
-sospensione, Data Protection e copertura privacy sono fatti; il resto no. Questa
-sezione distingue le due cose, perché un documento di sicurezza che descrive le
-intenzioni come se fossero fatti è peggio dell'assenza del documento.
+**L'hardening (M10) è completo e verificato su device.** Questa sezione elenca
+ciò che è implementato; sotto, ciò che resta fuori e perché — perché un
+documento di sicurezza che descrive le intenzioni come se fossero fatti è
+peggio dell'assenza del documento.
 
 Implementato:
 
@@ -117,12 +117,15 @@ Implementato:
 | Memoria in **decifratura** | Verificata sui parametri dell'header prima di derivare la chiave, per decrypt, verify e batch. Il rifiuto spiega che la quantità l'ha decisa chi ha cifrato e non è abbassabile: chi apre non ha scelto nulla |
 | Manifesto di privacy | `PrivacyInfo.xcprivacy`: nessun dato raccolto, nessun tracciamento. Le API a motivazione obbligatoria dichiarate sono quelle **realmente usate** — UserDefaults, spazio disco, metadati dei file — ricavate cercandole nel codice. `check-release-bundle.sh` verifica che il manifesto sia nel bundle e continui a dichiarare zero raccolta |
 
-**Non ancora implementato** (M10 — vedi
+**Fuori perimetro finché l'app non si pubblica** (M11 — vedi
 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)):
 
 | Ambito | Stato |
 |---|---|
-| `ITSAppUsesNonExemptEncryption` | **Non dichiarata.** È export compliance, non implementazione: finché la posizione non è presa, nell'`Info.plist` resta un commento — una chiave sbagliata lì è peggio di una assente |
+| `ITSAppUsesNonExemptEncryption` | **Non dichiarata, e per ora non richiesta.** È export compliance: serve alla prima submission. Finché non si pubblica, nell'`Info.plist` resta un commento — una chiave sbagliata lì è peggio di una assente |
+
+Non è una lacuna di sicurezza: è una dichiarazione amministrativa che ha senso
+solo davanti a una distribuzione.
 
 La suite completa gira su un **iPhone 14 Pro (iOS 26.5.2)** ed è verde, e le
 classi di Data Protection sono verificate lì — in simulatore quei test saltano,

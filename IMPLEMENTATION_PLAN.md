@@ -63,7 +63,7 @@ Da prendere prima o durante M1-M2; ognuna cambia il lavoro a valle.
 | D1 | Tag del core | `v2.0.3` (da spec) / `v2.0.4` | **`v2.0.4`** — core identico, orchestrazione migliore |
 | D2 | Generazione progetto Xcode | XcodeGen / Tuist / `.xcodeproj` a mano | ✅ **XcodeGen 2.46** adottato in M2 |
 | D3 | Deployment target | iOS 17 / iOS 16 | ✅ **iOS 17** adottato in M2 (`minos 17.0` verificato) |
-| D4 | Apple Developer Program | sì / no | Necessario per test su device reale (§13.2 memoria) e M11 |
+| D4 | Apple Developer Program | sì / no | ⏸️ **Non più bloccante.** I test su device girano con la firma gratuita (verificato 2026-07-26); serve solo per pubblicare → M11 |
 | D5 | Distribuzione | TestFlight / App Store | **TestFlight** per tutto lo sviluppo, indipendentemente dalla scelta finale |
 
 ---
@@ -421,7 +421,7 @@ non li richiede. Vanno affrontati quando si vorrà l'uso ripetuto fluido.
 | Preflight memoria in decifratura — i parametri vengono dall'header e non sono negoziabili | M10, come da piano |
 | Verifica dello spazio prima di iniziare | M6 |
 | Bookmark persistenti, cartella di destinazione ricordata | dopo M8 |
-| Prova su device reale | bloccata da **D4** |
+| ~~Prova su device reale~~ | ~~bloccata da **D4**~~ → ✅ eseguita il 2026-07-26: la firma gratuita basta, D4 non era bloccante |
 
 ---
 
@@ -673,7 +673,7 @@ appare e sparisce è più difficile da ritrovare di uno sempre nello stesso post
 | Cifratura di cartelle, TAR, verifica dello spazio | M6 |
 | Tema selezionabile, i18n, Dynamic Type e VoiceOver verificati | M9 |
 | Preflight memoria in **decifratura** (parametri dall'header) | M10 |
-| Prova su device reale | bloccata da **D4** |
+| ~~Prova su device reale~~ | ~~bloccata da **D4**~~ → ✅ eseguita il 2026-07-26: la firma gratuita basta, D4 non era bloccante |
 
 ---
 
@@ -1122,7 +1122,7 @@ non compariva.
 
 | Cosa | Dove |
 |---|---|
-| Prova con VoiceOver realmente acceso, su device | M10 — l'audit automatico non la sostituisce |
+| ~~Prova con VoiceOver realmente acceso, su device~~ | ~~M10~~ → ✅ eseguita il 2026-07-26, superata |
 | Preflight memoria in decifratura | M10 |
 
 ---
@@ -1564,7 +1564,16 @@ un'operazione lunga, a mano.
 
 ---
 
-### M10 — Hardening
+### M10 — Hardening ✅ COMPLETATA (2026-07-26)
+
+**Exit raggiunto:** tutte le voci sotto sono fatte e verificate su device; le
+due prove non automatizzabili sono state eseguite a mano. `ITSAppUsesNonExemptEncryption`,
+che prima figurava qui, è stata spostata in M11: è una dichiarazione di export
+compliance, non hardening, e ha senso solo davanti a una submission.
+
+Il dettaglio dei cinque punti è nelle sezioni datate più sopra. Segue la
+tabella originale del piano, per confronto.
+
 
 | Area | Intervento |
 |---|---|
@@ -1578,12 +1587,51 @@ un'operazione lunga, a mano.
 
 ---
 
-### M11 — Distribuzione
+### M11 — Distribuzione ⏸️ SOSPESA — solo se si decide di pubblicare
 
-- `PrivacyInfo.xcprivacy`: nessun dato raccolto
-- `ITSAppUsesNonExemptEncryption` — posizione verificata e **documentata in `README.md` prima** della prima submission, non dopo
-- **Non portare l'updater in-app**, né alcun controllo versione che rimandi altrove: vietato da App Store
-- TestFlight (build scadono a 90 giorni)
+**Nessuna di queste voci blocca lo sviluppo, e nessuna va spuntata "per
+sicurezza".** L'app è completa e verificata come applicazione; pubblicarla è una
+decisione separata e ancora da prendere. Finché non è presa, questa sezione
+resta ferma: le voci qui dentro hanno senso solo davanti a una submission vera.
+
+Sono state raccolte qui perché sparse fra le milestone davano l'impressione di
+lavoro incompleto, mentre sono lavoro **non ancora richiesto**.
+
+| Voce | Natura | Nota |
+|---|---|---|
+| **Apple Developer Program** (D4) | Iscrizione a pagamento | Non serve più per lo sviluppo: il device funziona con la firma gratuita. Serve solo per TestFlight e App Store |
+| **`ITSAppUsesNonExemptEncryption`** | Dichiarazione legale | Vedi sotto — non è una scelta di implementazione |
+| **TestFlight** | Distribuzione | Le build scadono dopo 90 giorni |
+| **Non portare l'updater in-app** | Vincolo | Vietato da App Store, e vale anche per un semplice controllo versione che rimandi altrove. Già rispettato: l'updater firmato del desktop non è stato portato |
+
+#### Export compliance, quando servirà
+
+`ITSAppUsesNonExemptEncryption` non è una chiave tecnica: **è la dichiarazione
+stessa**, scritta nel file invece che nel form. Finché non è presa una
+posizione, nell'`Info.plist` resta un commento — una chiave sbagliata lì è
+peggio di una assente, e non è un errore che si corregge con un commit.
+
+Le esenzioni comuni **non si applicano**, ed è bene saperlo prima di trovarsi
+davanti al questionario: non è "solo autenticazione o firma" (si cifrano i dati
+dell'utente), e non è "solo crittografia del sistema operativo" (il core Rust è
+compilato dentro l'app). Dichiarare `false` per esclusione non sarebbe
+difendibile per un'app il cui scopo dichiarato è cifrare file.
+
+La strada che si adatta è quella del **software pubblicamente disponibile**: il
+sorgente è pubblico sotto MIT/Apache-2.0, e sia l'EAR statunitense
+(§740.13(e), che copre sorgente *e object code corrispondente*, previa notifica
+via email a BIS e NSA) sia il regolamento UE 2021/821 (esclusione per ciò che è
+nel pubblico dominio) hanno una via per quel caso. L'alternativa —
+autoclassificazione *mass market* 5D992 — comporta un report annuale per un
+risultato equivalente.
+
+Il vantaggio non è la comodità: è che **non dipende da un giudizio
+discrezionale**. "Il sorgente è pubblico a questo indirizzo" è un fatto
+verificabile; "questa crittografia è esente" sarebbe un'opinione, e per un'app
+di cifratura è l'opinione meno comoda da dover difendere.
+
+⚠️ Riassunto operativo, non parere legale. Il testo del questionario Apple
+cambia: al momento della submission va letto, non dedotto da qui.
 
 ---
 
@@ -1597,29 +1645,35 @@ un'operazione lunga, a mano.
 | Security scope chiuso troppo presto | Medio — `IO_ERROR` intermittenti, difficili da diagnosticare | Helper unico `withSecurityScope`, mai duplicato |
 | Divergenza silenziosa di formato | **Critico** — file illeggibili dal desktop | M7 come gate; nessuna primitiva reimplementata in Swift |
 | Progress senza throttling | Medio — UI bloccata su file grandi | Cap ~10 update/s |
-| Assenza Apple Developer Program | Medio — blocca test su device e M11 | Decisione D4 in anticipo |
+| ~~Assenza Apple Developer Program~~ | ~~Medio~~ | ✅ **rientrato** — la firma gratuita basta per i test su device. Resta un prerequisito della sola pubblicazione (M11) |
 
 ---
 
 ## 5. Prossimo passo
 
-M1–M9 sono completate; M7 resta il gate di rilascio.
+**M1–M10 sono completate.** M7 resta il gate di rilascio, e gira a ogni
+esecuzione dei test.
 
-**Eseguire M10 — hardening.** La tabella della milestone è il piano; due voci
-arrivano da M9 e vanno tenute insieme al resto:
+L'app è finita come applicazione: cifra e decifra file e cartelle, in coda, con
+verifica d'integrità, registro, due lingue, su iPhone e iPad, con l'hardening
+fatto e misurato su device. Non c'è una milestone successiva obbligata.
 
-- **VoiceOver acceso davvero, su device.** L'audit automatico di M9 copre
-  etichette, contrasto, testo tagliato e aree toccabili, ma non dice se
-  l'*ordine* di lettura ha senso, né se un'operazione lunga è seguibile senza
-  vedere lo schermo. Non è verificabile in simulatore.
-- **Preflight memoria in decifratura**, dove i parametri arrivano dall'header e
-  non sono negoziabili.
+Le due direzioni possibili sono **indipendenti fra loro**, e nessuna è dovuta:
 
-Il resto di M10 — jetsam, Data Protection, background, privacy UI — richiede un
-**device reale**: il simulatore non ha i limiti di memoria e nasconde
-esattamente il problema del profilo Paranoid. Dipende quindi da **D4**
-(Apple Developer Program), che conviene sciogliere prima di iniziare, non a
-metà.
+**M11 — pubblicare.** Sospesa per scelta. Richiede l'iscrizione all'Apple
+Developer Program e la posizione sull'export compliance. Va aperta solo se e
+quando si decide di distribuire; finché no, non è lavoro arretrato.
+
+**M12 — nota cifrata.** Progettata, non iniziata. Ha una decisione aperta che
+va presa **prima** di scrivere codice, e non è tecnica: contro chi deve
+proteggere la nota. Se la risposta include "chi esegue codice nel processo",
+la funzione non va fatta — perché non potrebbe proteggerne, e dirlo dopo
+sarebbe peggio che non averla.
+
+Manutenzione ordinaria, indipendente da entrambe: **verificare l'allineamento
+col desktop** quando esce una release, col metodo descritto nel README (il
+numero di versione non dice se il formato è cambiato: va guardato il diff di
+`src/`).
 
 ---
 
