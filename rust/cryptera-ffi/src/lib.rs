@@ -204,7 +204,9 @@ pub fn configure_thread_pool(max_threads: u32) {
     THREAD_POOL_INIT.call_once(|| {
         let n = max_threads.clamp(1, 64) as usize;
         // Un fallimento qui non è fatale: rayon resta sul default.
-        let _ = rayon::ThreadPoolBuilder::new().num_threads(n).build_global();
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(n)
+            .build_global();
     });
 }
 
@@ -263,7 +265,11 @@ pub fn integrity_profile_overhead_percent(profile: IntegrityProfile) -> u32 {
 /// Versione dell'FFI e tag del core su cui è compilata.
 #[uniffi::export]
 pub fn core_version() -> String {
-    format!("cryptera-ffi {} (core {})", env!("CARGO_PKG_VERSION"), CORE_TAG)
+    format!(
+        "cryptera-ffi {} (core {})",
+        env!("CARGO_PKG_VERSION"),
+        CORE_TAG
+    )
 }
 
 // ─── Operazioni ────────────────────────────────────────────────────
@@ -468,7 +474,11 @@ pub fn encrypt(
                 // `None` quando il nome non va nascosto: il core lo deriva
                 // dall'input. Passare esplicitamente il nome qui produrrebbe un
                 // header diverso da quello del desktop.
-                let original_name = if request.hide_filename { Some("") } else { None };
+                let original_name = if request.hide_filename {
+                    Some("")
+                } else {
+                    None
+                };
                 let mut progress = |stage: &str, done: u64, total: u64| {
                     throttled.emit(stage, done, total);
                 };
@@ -566,10 +576,7 @@ pub fn encrypt(
 // ─── Helper ────────────────────────────────────────────────────────
 
 fn flags_of(token: &Option<Arc<CancelToken>>) -> ControlFlags {
-    token
-        .as_ref()
-        .map(|t| t.flags.clone())
-        .unwrap_or_default()
+    token.as_ref().map(|t| t.flags.clone()).unwrap_or_default()
 }
 
 fn load_keyfile(path: Option<&str>) -> Result<Option<Vec<u8>>, CrypteraError> {
@@ -633,7 +640,9 @@ mod tests {
 
     #[test]
     fn le_fixture_non_sono_container_tar() {
-        assert!(!read_metadata(fixture("v4-basic.ecf")).unwrap().is_tar_container());
+        assert!(!read_metadata(fixture("v4-basic.ecf"))
+            .unwrap()
+            .is_tar_container());
     }
 
     #[test]
@@ -649,7 +658,10 @@ mod tests {
             None,
             None,
         );
-        assert!(matches!(r, Err(CrypteraError::PasswordRequired)), "ottenuto {r:?}");
+        assert!(
+            matches!(r, Err(CrypteraError::PasswordRequired)),
+            "ottenuto {r:?}"
+        );
     }
 
     #[test]
@@ -753,7 +765,10 @@ mod tests {
             None,
             None,
         );
-        assert!(matches!(r, Err(CrypteraError::HeaderAuthFailed)), "ottenuto {r:?}");
+        assert!(
+            matches!(r, Err(CrypteraError::HeaderAuthFailed)),
+            "ottenuto {r:?}"
+        );
     }
 
     #[test]
@@ -834,7 +849,10 @@ mod tests {
         )
         .expect("estrazione riuscita");
 
-        assert_eq!(std::fs::read(out.join("documenti/uno.txt")).unwrap(), b"primo");
+        assert_eq!(
+            std::fs::read(out.join("documenti/uno.txt")).unwrap(),
+            b"primo"
+        );
         assert_eq!(
             std::fs::read(out.join("documenti/sub/due.txt")).unwrap(),
             b"secondo"
@@ -958,13 +976,19 @@ mod tests {
         )
         .expect("l'estrazione deve riuscire");
 
-        assert_eq!(meta.filename, nome_ostile, "il nome ostile arriva davvero dall'header");
+        assert_eq!(
+            meta.filename, nome_ostile,
+            "il nome ostile arriva davvero dall'header"
+        );
         assert!(
             !fuori.exists(),
             "path traversal: scritto fuori dalla destinazione in {}",
             fuori.display()
         );
-        assert!(out.join("dentro.txt").exists(), "il contenuto legittimo va estratto");
+        assert!(
+            out.join("dentro.txt").exists(),
+            "il contenuto legittimo va estratto"
+        );
         // L'archivio conservato deve stare nella destinazione, col nome ridotto
         // al solo componente finale.
         assert!(
@@ -1019,7 +1043,10 @@ mod tests {
         };
 
         let normale = describe_header(cifra(&dir.path().join("normale.ecf"), false));
-        assert!(normale.is_tar_container, "la UI deve poter offrire l'estrazione");
+        assert!(
+            normale.is_tar_container,
+            "la UI deve poter offrire l'estrazione"
+        );
         assert!(normale.has_password_check);
         assert!(
             normale.filename_encrypted,
@@ -1051,7 +1078,10 @@ mod tests {
         ] {
             let esposti = security_profile_params(profilo);
             let (t, m, p) = profilo.params();
-            assert_eq!((esposti.time_cost, esposti.memory_kib, esposti.parallelism), (t, m, p));
+            assert_eq!(
+                (esposti.time_cost, esposti.memory_kib, esposti.parallelism),
+                (t, m, p)
+            );
             assert_eq!(
                 security_profile_memory_bytes(profilo),
                 u64::from(esposti.memory_kib) * 1024
@@ -1061,11 +1091,20 @@ mod tests {
 
     #[test]
     fn safe_output_name_neutralizza_i_nomi_ostili() {
-        assert_eq!(safe_output_name("../../evil.txt".into(), "out.bin".into()), "evil.txt");
-        assert_eq!(safe_output_name("/etc/passwd".into(), "out.bin".into()), "passwd");
+        assert_eq!(
+            safe_output_name("../../evil.txt".into(), "out.bin".into()),
+            "evil.txt"
+        );
+        assert_eq!(
+            safe_output_name("/etc/passwd".into(), "out.bin".into()),
+            "passwd"
+        );
         assert_eq!(safe_output_name("".into(), "out.bin".into()), "out.bin");
         assert_eq!(safe_output_name("..".into(), "out.bin".into()), "out.bin");
-        assert_eq!(safe_output_name("normale.pdf".into(), "out.bin".into()), "normale.pdf");
+        assert_eq!(
+            safe_output_name("normale.pdf".into(), "out.bin".into()),
+            "normale.pdf"
+        );
     }
 
     #[test]
@@ -1365,7 +1404,10 @@ mod tests {
             None,
             None,
         );
-        assert!(matches!(r, Err(CrypteraError::HeaderAuthFailed)), "ottenuto {r:?}");
+        assert!(
+            matches!(r, Err(CrypteraError::HeaderAuthFailed)),
+            "ottenuto {r:?}"
+        );
     }
 
     /// Cifra un file di prova e restituisce il percorso del `.ecf`.

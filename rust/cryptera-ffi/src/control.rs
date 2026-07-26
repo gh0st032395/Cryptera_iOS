@@ -82,9 +82,7 @@ impl Throttled {
 
         let is_final = total > 0 && done >= total;
         let stage_changed = stage != self.last_stage;
-        let due = self
-            .last_emit
-            .is_none_or(|t| t.elapsed() >= THROTTLE);
+        let due = self.last_emit.is_none_or(|t| t.elapsed() >= THROTTLE);
 
         if is_final || stage_changed || due {
             listener.on_progress(stage.to_string(), done, total);

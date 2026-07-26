@@ -1,0 +1,138 @@
+name: iOS CI
+
+# Il repository non aveva alcuna CI: build e test giravano solo sul Mac di
+# sviluppo. Per un'app di cifratura il rischio non è il refuso ma la
+# **divergenza di formato** — un file prodotto da iOS che il desktop non apre —
+# e i test che la intercettano (M7) devono girare a ogni push, non quando
+# qualcuno si ricorda di lanciarli.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  # Utile per rieseguire la suite dopo un cambiamento dell'upstream senza
+  # dover fare un commit finto.
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── Livello Rust ──────────────────────────────────────────────────────────
+  #
+  # Separato dal job dell'app perché dà il segnale in ~2 minuti invece di ~15:
+  # se l'orchestrazione è rotta, non serve aspettare la compilazione
+  # dell'XCFramework e i UI test per saperlo.
+  rust:
+    name: Rust (fmt, clippy, test)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: rustfmt
+        working-directory: rust
+        run: cargo fmt --check
+
+      - name: clippy
+        working-directory: rust
+        run: cargo clippy --all-targets -- -D warnings
+
+      # Gira sull'host, non su iOS: la logica di orchestrazione è la stessa e
+      # qui i test costano secondi. La compilazione *per* iOS è verificata dal
+      # job seguente, che è ciò che conta per il device.
+      - name: cargo test
+        working-directory: rust
+        run: cargo test --release
+
+  # ── Applicazione ──────────────────────────────────────────────────────────
+  app:
+    name: App (XCFramework, test, gate di release)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Installa XcodeGen e xcbeautify
+        run: brew install xcodegen xcbeautify
+
+      # Aggiunge i tre target iOS e verifica SDK e strumenti. Fallisce con un
+      # messaggio leggibile invece di lasciar sbagliare cargo molto più avanti.
+      - name: Prepara la toolchain
+        run: ./scripts/bootstrap.sh
+
+      # Produce Frameworks/CrypteraCore.xcframework e i binding Swift, che non
+      # sono committati (SPEC §3.1): senza questo passo non esiste niente da
+      # compilare.
+      - name: Costruisci l'XCFramework
+        run: ./scripts/build-xcframework.sh
+
+      - name: Genera il progetto Xcode
+        run: xcodegen generate
+
+      # Il nome dei simulatori cambia a ogni versione di Xcode, e fissarlo
+      # romperebbe la CI a ogni aggiornamento del runner per una ragione che non
+      # c'entra col codice. Si prende il primo iPhone disponibile.
+      - name: Scegli un simulatore
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available \
+            | grep -E "^\s+iPhone" \
+            | head -1 \
+            | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/')
+          if [ -z "$UDID" ]; then
+            echo "Nessun simulatore iPhone disponibile sul runner" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          echo "Simulatore scelto: $UDID"
+
+      # Unitari e UI insieme. I UI test sono lenti (~5 min) ma coprono il
+      # percorso che gli unitari non vedono: i selettori di sistema, il
+      # cambio di lingua e l'audit di accessibilità di M9.
+      - name: Test
+        run: |
+          # `pipefail` è obbligatorio: senza, l'esito della pipe è quello di
+          # xcbeautify — che riesce sempre — e una suite rossa passerebbe per
+          # verde. È il modo tipico in cui una CI iOS smette di servire a
+          # qualcosa senza che nessuno se ne accorga.
+          set -o pipefail
+          xcodebuild test \
+            -project Cryptera.xcodeproj \
+            -scheme Cryptera \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            | xcbeautify --renderer github-actions
+        env:
+          NSUnbufferedIO: YES
+
+      # Una chiave senza traduzione non fa fallire l'app — ricade sull'inglese —
+      # quindi senza questo controllo le dimenticanze restano invisibili.
+      - name: Localizzazione completa
+        run: ./scripts/check-localization.sh
+
+      # Verifica sul .app prodotto che una build Release non contenga fixture,
+      # bundle di test né framework di rete (SPEC §12.4). Non è esprimibile
+      # come XCTest: la suite non compila in Release.
+      - name: Bundle Release pulito
+        run: ./scripts/check-release-bundle.sh

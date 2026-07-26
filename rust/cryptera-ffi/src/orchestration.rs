@@ -431,7 +431,8 @@ mod tests {
                 header.set_entry_type(tar::EntryType::Symlink);
                 header.set_size(0);
                 header.set_mode(0o777);
-                b.append_link(&mut header, "link", Path::new(target)).unwrap();
+                b.append_link(&mut header, "link", Path::new(target))
+                    .unwrap();
                 b.finish().unwrap();
             }
 
@@ -458,7 +459,8 @@ mod tests {
             header.set_entry_type(tar::EntryType::Symlink);
             header.set_size(0);
             header.set_mode(0o777);
-            b.append_link(&mut header, "link", Path::new("vicino.txt")).unwrap();
+            b.append_link(&mut header, "link", Path::new("vicino.txt"))
+                .unwrap();
             b.finish().unwrap();
         }
 

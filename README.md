@@ -1,8 +1,19 @@
 # Cryptera iOS
 
-App iOS nativa in SwiftUI per il formato **ECF1**, con parità funzionale rispetto
-a [Cryptera desktop](https://github.com/gh0st032395/Cryptera) nei limiti imposti
-dalla sandbox iOS.
+[![iOS CI](https://github.com/gh0st032395/Cryptera_iOS/actions/workflows/ios.yml/badge.svg)](https://github.com/gh0st032395/Cryptera_iOS/actions/workflows/ios.yml)
+
+App iOS nativa in SwiftUI per il formato **ECF1**: cifratura locale di file e
+cartelle con AES-256-GCM, chiave derivata con Argon2id e correzione d'errore
+Reed-Solomon.
+
+È il **porting di [Cryptera desktop](https://github.com/gh0st032395/Cryptera)**,
+non un'app diversa con lo stesso nome: un file cifrato sull'iPhone si apre sul
+desktop e viceversa, byte per byte. Nessuna primitiva crittografica è
+reimplementata in Swift — il core Rust è consumato come dipendenza con tag
+pinnato.
+
+L'app **non fa alcuna richiesta di rete**: nessuna telemetria, nessun account,
+nessun servizio. Tutto avviene sul dispositivo.
 
 Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 
@@ -10,66 +21,64 @@ Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 
 ## Stato
 
-🚧 **M7 verde — il gate di rilascio è passato.** Otto file prodotti
-dall'**applicazione desktop 2.0.4** vengono letti dal codice iOS con confronto
-byte per byte, a ogni esecuzione dei test. E un file cifrato dall'iPhone è stato
-decifrato dal desktop, verificato a mano.
+🚧 **In sviluppo.** M1–M9 completate; non ancora distribuita.
 
-L'app cifra e decifra file e cartelle, anche in blocco, con registro delle operazioni, in inglese e italiano.
+**M7 — il gate di rilascio — è verde.** Otto file prodotti dall'applicazione
+desktop vengono letti dal codice iOS con confronto byte per byte a ogni
+esecuzione dei test, e un file cifrato dall'iPhone è stato decifrato dal desktop.
 
-La roadmap completa è in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
-La specifica di riferimento è in [`SPEC.md`](SPEC.md).
+Oggi l'app cifra e decifra file e cartelle, anche in coda, con verifica
+d'integrità e registro delle operazioni, in inglese e italiano, su iPhone e iPad.
 
 | Milestone | Stato |
 |---|---|
-| M1 — Spike cross-compilazione | ✅ **verde, senza limitazioni** |
-| M2 — XCFramework | ✅ **app verde su simulatore** |
-| M3 — Primo end-to-end (`verify`) | ✅ **48 test verdi, revisionata** |
-| M4 — Decrypt | ✅ **79 test verdi, verificata sul simulatore** |
-| M5 — Encrypt file | ✅ **121 test verdi, provata su iPhone; design, impostazioni e localizzazione anticipati da M9** |
-| M6 — Encrypt cartella | ✅ **134 test verdi, con verifica dello spazio** |
-| M7 — Round-trip incrociato (**gate di rilascio**) | ✅ **149 test verdi; 8 file del desktop letti byte per byte** |
-| M8 — Batch + Audit | ✅ **171 test verdi** |
-| M9 — Design system | ⬜ |
-| M10 — Hardening | ⬜ |
-| M11 — Distribuzione TestFlight | ⬜ |
+| M1 — Spike cross-compilazione | ✅ verde, nessuna limitazione |
+| M2 — XCFramework | ✅ app verde su simulatore |
+| M3 — Primo end-to-end (`verify`) | ✅ superficie FFI completa |
+| M4 — Decrypt | ✅ apertura dall'app File, export al sistema |
+| M5 — Encrypt file | ✅ design, impostazioni e localizzazione anticipati da M9 |
+| M6 — Encrypt cartella | ✅ con verifica dello spazio |
+| M7 — Round-trip incrociato (**gate di rilascio**) | ✅ 8 file del desktop letti byte per byte |
+| M8 — Batch + Audit | ✅ coda e registro delle operazioni |
+| M9 — Design system | ✅ accessibilità verificata, iPad, icona adattiva |
+| M10 — Hardening | ⬜ richiede un device reale |
+| M11 — Distribuzione TestFlight | ⬜ richiede Apple Developer Program |
+
+**178 test verdi**: 42 Rust, 110 XCTest, 26 UI test.
+
+Roadmap completa in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md);
+specifica di implementazione in [`SPEC.md`](SPEC.md).
 
 ---
 
-## Requisito centrale
+## Requisito centrale: allineamento col desktop
 
 I file prodotti su iOS devono essere decifrabili dal desktop e viceversa,
-**byte-per-byte compatibili**. Nessuna deroga. Nessuna primitiva crittografica
-viene reimplementata in Swift: il core Rust `crypto_core_rs` è consumato come
-dipendenza git con tag pinnato.
+**byte-per-byte compatibili**. Nessuna deroga.
 
----
+Ne discendono due regole che non sono negoziabili:
 
-## Esito dello spike di cross-compilazione (SPEC §4.1)
+1. **Nessuna primitiva crittografica reimplementata in Swift.** Il core
+   `crypto_core_rs` è una dipendenza git con tag pinnato.
+2. **Anche l'orchestrazione sta in Rust** — costruzione del TAR, suffissi,
+   sanificazione dei nomi, parametri dei profili. Determina il *contenuto* del
+   file, quindi non può vivere in Swift, dove divergerebbe in silenzio.
 
-> ✅ **M1 chiusa — esito completamente positivo. Nessuna limitazione funzionale.**
-> Verificato il 2026-07-22 con Xcode 26.6 (SDK iOS 26.5), cargo 1.96.0,
-> `crypto_core_rs` a `v2.0.4`.
+Se compilare per iOS diventasse difficile, la risposta è risolvere il problema di
+build, non aggirarlo riscrivendo qualcosa in Swift.
 
-| Componente | `aarch64-apple-ios` | Simulatore | Note |
-|---|---|---|---|
-| `crypto_core_rs` | ✅ | ✅ arm64 + x86_64 | Compila pulito, nessun flag speciale |
-| `xz2` / `liblzma` (LZMA2) | ✅ | ✅ | **73 file oggetto liblzma, 719 simboli `lzma_*`** — realmente compilato, non stubbato |
-| `bzip2` / `bzip2-sys` | ✅ | ✅ | 35 simboli `BZ2_*` |
-| `tar`, `flate2`, `walkdir`, `tempfile` | ✅ | ✅ | |
+### Verificare l'allineamento quando il desktop si aggiorna
 
-**Nessun intervento richiesto.** Non sono serviti né `CC`/`AR` espliciti verso
-l'SDK iOS né il fallback a `lzma-rs`: il crate `cc` risolve i target iOS da solo.
-Le tre voci ⚠️ della matrice di parità (SPEC §9 — LZMA2, archivi gz/xz, archivi
-bz2) **diventano ✅**: l'app iOS può leggere e scrivere ogni variante di
-compressione del formato.
+Il numero di versione del desktop **non dice se il formato è cambiato**: le
+release 2.1.x, per esempio, hanno toccato solo CLI, `ops/`, backend Tauri e
+frontend. Il controllo da fare è sul core:
 
-Artefatto verificato con `otool`: `platform 2` (iOS), architettura arm64.
+```bash
+git -C ../Cryptera diff v2.0.4..v2.1.1 -- src/
+```
 
-**Nota sul deployment target.** Senza variabile d'ambiente il `minos` eredita la
-versione dell'SDK (26.5), che escluderebbe ogni device non aggiornatissimo.
-`IPHONEOS_DEPLOYMENT_TARGET=17.0` produce correttamente `minos 17.0` e va
-impostato in `scripts/build-xcframework.sh` per **tutti** i target.
+Se il diff è vuoto, il formato è identico e il pin resta valido. Se non lo è,
+serve aggiornare il tag e rieseguire M7 prima di ogni altra cosa.
 
 ---
 
@@ -81,17 +90,35 @@ impostato in `scripts/build-xcframework.sh` per **tutti** i target.
 | Tag pinnato | `v2.0.4` |
 | Formato | ECF1 header **v5** |
 
-**Nota sul tag.** `SPEC.md` indica `v2.0.3`. Il file `src/lib.rs` del core è
-**identico byte-per-byte fra v2.0.3 e v2.0.4** (SHA-256
-`ed4bcbc60d2d5666922b1b2fc44a44fa58bd936983c0ca1c3c67ca70f6cd93d3`): le release
-2.0.4 contengono solo correzioni a frontend e livello Tauri. Si pinna quindi
+**Perché `v2.0.4` e non l'ultima release.** `src/lib.rs` del core è identico
+byte per byte fra `v2.0.3`, `v2.0.4` e `v2.1.1`: le release successive contengono
+solo lavoro su CLI, crate `ops/`, backend Tauri e interfaccia. Si pinna quindi
 `v2.0.4` — zero rischio di divergenza di formato — e si porta l'orchestrazione
 dalla sua `src-tauri/src/main.rs`, che include il pre-conteggio delle entry per
 il progress di archiviazione (assente in 2.0.3).
 
+Le correzioni del desktop che riguardano l'orchestrazione vengono **portate a
+mano** quando servono, non ereditate: il crate `ops/` condiviso introdotto in
+2.1.0 non è stato adottato perché la versione iOS diverge deliberatamente (errori
+`CrypteraError`, nessuna dipendenza dal filesystem del desktop).
+
+---
+
+## Compatibilità di formato
+
+| Versione header | Lettura | Scrittura |
+|---|---|---|
+| v1 – v4 | ✅ | — |
+| v5 (nome file cifrato) | ✅ | ✅ |
+
+Tutte le varianti di compressione del formato sono supportate in lettura e
+scrittura, payload e archivio: ZLIB, LZMA2, gzip, bzip2, xz.
+
 ---
 
 ## Build
+
+Toolchain richiesta: Xcode con SDK iOS, Rust, e `brew install xcodegen`.
 
 ```bash
 ./scripts/bootstrap.sh          # verifica toolchain + target rustup
@@ -105,50 +132,97 @@ Da riga di comando:
 ```bash
 xcodebuild test -project Cryptera.xcodeproj -scheme Cryptera \
   -destination 'platform=iOS Simulator,name=iPhone 17'
-
-./scripts/check-release-bundle.sh   # cosa finisce davvero in una build Release
 ```
 
-`check-localization.sh` verifica che ogni stringa passata a `L.t(...)` abbia una
-traduzione italiana: una chiave mancante non fallisce da sola, perché ricade
-sull'inglese — corretto in produzione, ma nasconde le dimenticanze.
-
-`check-release-bundle.sh` verifica sul `.app` prodotto che non contenga dati di
-test, bundle di test, né framework di rete (SPEC §12.4). Non è un XCTest perché
-la suite non compila in Release: `@testable import` richiede
-`ENABLE_TESTABILITY`, che in una build distribuibile va lasciata spenta.
-
-> Le fixture dell'upstream sono nel bundle dell'app **solo in Debug**, dove
-> servono a pilotare i UI test: l'input arriva da `.fileImporter`, che è UI di
-> sistema e fuori processo. I UI test iniettano quindi una fixture con
-> l'argomento di lancio `-apri-fixture`, che percorre lo stesso codice di
-> `.onOpenURL`. In Release le fixture sono escluse e quel codice non viene
-> nemmeno compilato.
-
-**Tre cose sono artefatti di build e non sono committate** (SPEC §3.1) —
-vanno rigenerate con i comandi qui sopra:
+**Tre cose sono artefatti di build e non sono committate** (SPEC §3.1) — vanno
+rigenerate con i comandi qui sopra:
 
 | Artefatto | Generato da |
 |---|---|
 | `Frameworks/CrypteraCore.xcframework` | `build-xcframework.sh` |
 | `Cryptera/Core/Generated/cryptera_ffi.swift` | `build-xcframework.sh` (uniffi-bindgen) |
-| `Cryptera.xcodeproj` | `xcodegen generate` da `project.yml` |
+| `Cryptera.xcodeproj` | `xcodegen generate` |
 
 La fonte di verità del progetto Xcode è [`project.yml`](project.yml): il
 `.pbxproj` produce conflitti di merge illeggibili, quindi non entra nel repo.
 Aggiungendo un file al progetto va rieseguito `xcodegen generate`.
 
-Toolchain richiesta: Xcode con SDK iOS, Rust, e `brew install xcodegen`.
+### Controlli automatici
+
+Girano in CI a ogni push, e si possono eseguire a mano:
+
+```bash
+./scripts/check-localization.sh     # ogni chiave usata ha una traduzione
+./scripts/check-release-bundle.sh   # cosa finisce davvero in una build Release
+```
+
+`check-localization.sh` serve perché una chiave senza traduzione **non fallisce
+da sola**: ricade sull'inglese, che in produzione è il comportamento corretto ma
+nasconde le dimenticanze.
+
+`check-release-bundle.sh` verifica sul `.app` prodotto che non contenga dati di
+test, bundle di test né framework di rete (SPEC §12.4). Non è un XCTest perché la
+suite non compila in Release: `@testable import` richiede `ENABLE_TESTABILITY`,
+che in una build distribuibile va lasciata spenta.
+
+> Le fixture dell'upstream sono nel bundle dell'app **solo in Debug**, dove
+> servono a pilotare i UI test: l'input arriva da `.fileImporter`, che è UI di
+> sistema e fuori processo. I UI test iniettano una fixture con l'argomento di
+> lancio `-apri-fixture`, che percorre lo stesso codice di `.onOpenURL`.
+
+### Icona
+
+L'icona è **disegnata da codice**, non è un binario opaco committato:
+
+```bash
+swift scripts/make-app-icon.swift Cryptera/Resources/Assets.xcassets/AppIcon.appiconset
+```
+
+Genera le tre apparenze di iOS 18 (standard, scura, colorata) a 1024×1024, senza
+canale alfa e senza angoli arrotondati disegnati — la maschera la applica il
+sistema, e disegnarla la applicherebbe due volte.
+
+---
+
+## Accessibilità
+
+Dynamic Type e VoiceOver sono requisiti, non rifiniture, e sono verificati da
+`CrypteraUITests/AccessibilityUITests` con `performAccessibilityAudit()` su tutte
+le schermate — in inglese a corpo normale, in inglese ad AX5 e **in italiano ad
+AX5**, perché le stringhe più lunghe si tagliano prima.
+
+Il contrasto dei colori è misurato alla sorgente con la formula WCAG 2.1
+(`CrypteraTests/DesignSystemContrastTests`), in entrambi i temi. È il motivo per
+cui il verde dell'accento su fondo chiaro **è più scuro di quello del desktop**:
+il valore dell'upstream faceva 2,9:1 come testo, sotto la soglia AA.
+
+Resta da fare una prova con VoiceOver realmente acceso su un device: l'audit
+automatico copre etichette, contrasto e geometria, non l'ordine di lettura.
 
 ---
 
 ## Privacy ed export compliance
 
-- L'app **non effettua alcuna richiesta di rete**. Nessuna telemetria, nessun
-  crash reporter di terze parti, nessun SDK esterno.
-- `PrivacyInfo.xcprivacy`: nessun dato raccolto.
+- Nessuna richiesta di rete, nessuna telemetria, nessun SDK di terze parti.
+  Verificato automaticamente sul binario prodotto.
+- Nessun aggiornamento in-app: vietato su App Store, e l'updater firmato del
+  desktop non è stato portato.
+- `PrivacyInfo.xcprivacy`: **da aggiungere** prima della prima submission (M10).
 - `ITSAppUsesNonExemptEncryption`: posizione da verificare e documentare qui
   **prima** della prima submission (SPEC §14.1).
+
+Limiti noti e modello di sicurezza in [`SECURITY.md`](SECURITY.md), incluso il
+punto in cui questo porting è più debole del desktop: la password in memoria non
+è azzerabile in modo affidabile, perché in Swift è una `String`.
+
+---
+
+## Segnalare una vulnerabilità
+
+Usare la **segnalazione privata** di GitHub (Security → Report a vulnerability),
+non una issue pubblica. Se riguarda il formato o il core crittografico, va
+aperta sul repository [Cryptera](https://github.com/gh0st032395/Cryptera):
+qui c'è l'interfaccia iOS, non la crittografia.
 
 ---
 
@@ -156,6 +230,7 @@ Toolchain richiesta: Xcode con SDK iOS, Rust, e `brew install xcodegen`.
 
 | File | Contenuto |
 |---|---|
-| [`SPEC.md`](SPEC.md) | Specifica di implementazione |
-| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Piano operativo per milestone |
+| [`SPEC.md`](SPEC.md) | Specifica di implementazione del porting |
+| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Piano operativo per milestone, con il registro delle decisioni |
 | [`FORMAT_SPEC.md`](FORMAT_SPEC.md) | Specifica normativa del formato ECF1 (da upstream) |
+| [`SECURITY.md`](SECURITY.md) | Modello di sicurezza e limiti noti |
