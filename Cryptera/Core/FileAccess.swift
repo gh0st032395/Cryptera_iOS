@@ -101,11 +101,34 @@ enum FileAccess {
     }
 
     private static func isInsideAppSandbox(_ url: URL) -> Bool {
-        let path = url.standardizedFileURL.path
         // Il bundle non sta dentro la home del container: su simulatore e su
         // device sono due alberi distinti, quindi vanno controllati entrambi.
+        let path = canonicalPath(url)
         return [URL(fileURLWithPath: NSHomeDirectory()), Bundle.main.bundleURL]
-            .contains { path.hasPrefix($0.standardizedFileURL.path + "/") }
+            .contains { path.hasPrefix(canonicalPath($0) + "/") }
+    }
+
+    /// Percorso confrontabile per prefisso, con `/private` sempre tolto.
+    ///
+    /// Serve perché **le normalizzazioni di Foundation non sono uniformi**:
+    /// `resolvingSymlinksInPath()` toglie il prefisso `/private` soltanto se il
+    /// percorso corrisponde a un file **esistente**. Misurato su iPhone:
+    ///
+    ///     tmp/                → /var/mobile/.../tmp          (esiste: tolto)
+    ///     tmp/non-ancora.bin  → /private/var/mobile/.../tmp/…  (non esiste: resta)
+    ///
+    /// Il confronto per prefisso falliva quindi esattamente sui percorsi non
+    /// ancora creati — cioè su ogni percorso di **output** — e si ricadeva su
+    /// `isReadableFile`, che per un file inesistente è falso: un percorso dentro
+    /// il container veniva giudicato fuori.
+    ///
+    /// Sul simulatore non succede, perché lì i container non stanno sotto
+    /// `/private`: il difetto è emerso solo eseguendo la suite su un device.
+    private static func canonicalPath(_ url: URL) -> String {
+        let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let privatePrefix = "/private/"
+        guard path.hasPrefix(privatePrefix) else { return path }
+        return String(path.dropFirst(privatePrefix.count - 1))
     }
 
     private static var inboxDirectory: URL? {

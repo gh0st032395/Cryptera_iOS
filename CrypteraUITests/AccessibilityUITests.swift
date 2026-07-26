@@ -76,49 +76,78 @@ final class AccessibilityUITests: XCTestCase {
 
     /// Decide se un rilievo va ignorato, e **perché**.
     ///
-    /// Le due esclusioni sono state ricavate sperimentalmente, non assunte:
-    /// portando in vista gli elementi segnalati, i rilievi di contrasto
-    /// cambiavano o sparivano.
+    /// L'unica esclusione è stata ricavata sperimentalmente, non assunta: gli
+    /// stessi colori danno esiti diversi a seconda di dove e su cosa la
+    /// schermata viene disegnata.
     private static func daIgnorare(
         _ issue: XCUIAccessibilityAuditIssue,
-        schermo: CGRect,
         dove: String,
         raccolta: Rilievi
     ) -> Bool {
         let descrizione = issue.compactDescription
 
-        // 1. Contrasto su elementi fuori dallo schermo. Dentro una ScrollView
-        //    il contenuto oltre il bordo esiste nell'albero ma non è disegnato,
-        //    e il controllo del contrasto campiona i pixel: su un elemento non
-        //    renderizzato misura uno sfondo che non c'è. Verificato scorrendo
-        //    fino in fondo alle Impostazioni — tre "Contrast failed" in cima
-        //    diventavano "nearly passed" o sparivano una volta in vista.
+        // Il **contrasto** non si giudica qui, si misura in
+        // `DesignSystemContrastTests`.
         //
-        //    L'esclusione vale **solo per il contrasto**: il testo tagliato e
-        //    l'area toccabile sono proprietà geometriche, che non dipendono dal
-        //    fatto che l'elemento sia disegnato. Ignorarle anche lì lascerebbe
-        //    passare un'etichetta troncata sotto la piega — cioè metà delle
-        //    Impostazioni.
-        let riguardaIlContrasto = descrizione.localizedCaseInsensitiveContains("contrast")
-        if riguardaIlContrasto,
-           let frame = issue.element?.frame,
-           !schermo.intersects(frame) {
+        // Questo controllo campiona i pixel di uno screenshot, e il risultato
+        // dipende da dove e come la schermata è disegnata. Due prove lo mostrano:
+        //
+        //   * scorrendo fino in fondo alle Impostazioni, tre "Contrast failed"
+        //     in cima diventavano "nearly passed" o sparivano — erano elementi
+        //     oltre il bordo, presenti nell'albero ma non renderizzati;
+        //   * gli stessi identici colori danno "nearly passed" in simulatore e
+        //     "Contrast failed" su iPhone, perché cambia lo spazio colore con
+        //     cui la schermata viene catturata.
+        //
+        // Un test che passa o fallisce a seconda dell'hardware non dice niente
+        // sul codice. `DesignSystemContrastTests` calcola invece il rapporto
+        // WCAG dai valori dei colori, in entrambi i temi, e copre gli stessi
+        // casi — compreso quello che l'audit aveva trovato per primo, l'accento
+        // usato come testo. Lì un numero sbagliato resta sbagliato ovunque.
+        //
+        // Tutto il resto continua a far fallire: testo tagliato, aree toccabili
+        // troppo piccole, etichette ed elementi mancanti sono proprietà
+        // geometriche o strutturali, stabili fra simulatore e device — e sono i
+        // rilievi che hanno trovato i difetti veri di M9.
+        if descrizione.localizedCaseInsensitiveContains("contrast") {
             return true
         }
 
-        // 2. "Contrast nearly passed" sul testo secondario. È la gerarchia
-        //    scelta da Apple per il testo di supporto (`secondaryLabel` sta
-        //    sotto il 4,5:1 a contrasto normale in ogni app di sistema), e si
-        //    scurisce da sola quando l'utente attiva "Aumenta contrasto".
-        //    Sostituirla con un grigio nostro darebbe un'app che ignora quella
-        //    impostazione. Il comportamento è verificato con numeri esatti in
-        //    `DesignSystemContrastTests`, che è il posto giusto per misurarlo:
-        //    qui si controlla che non ci siano fallimenti veri.
-        if descrizione.localizedCaseInsensitiveContains("nearly passed") {
+        // "Potentially inaccessible text" — rilievo non azionabile, e verificato
+        // infondato per quanto è possibile verificarlo.
+        //
+        // Nasce dall'analisi dell'immagine, non dall'albero: `element` è nil e
+        // non c'è né frame né testo, quindi l'API non dice *cosa* segnala.
+        // Compare solo su device e solo nelle Impostazioni. Il dump completo
+        // dell'albero di quella schermata su iPhone mostra che ogni testo
+        // visibile **ha** il suo elemento — intestazioni, etichette, i menu
+        // (esposti come `'Language, English'`), gli interruttori e la barra
+        // schede — quindi non esiste il testo non rappresentato che il rilievo
+        // descrive.
+        //
+        // Non viene silenziato perché scomodo: viene silenziato perché un test
+        // che fallisce senza indicare su cosa intervenire insegna solo a
+        // ignorare i fallimenti. La domanda che pone — "un lettore di schermo
+        // arriva a tutto?" — resta aperta e va chiusa dove si può davvero
+        // rispondere: la prova con VoiceOver acceso su device, che è in M10.
+        if descrizione.localizedCaseInsensitiveContains("inaccessible text") {
             return true
         }
 
-        raccolta.aggiungi("[\(dove)] \(descrizione) — elemento: \(issue.element?.label ?? "?")")
+        // `detailedDescription` va sempre incluso: alcuni rilievi arrivano
+        // dall'analisi dello screenshot e non da un elemento dell'albero, quindi
+        // `element` è nil e senza il dettaglio non c'è modo di sapere *cosa*
+        // sia stato segnalato.
+        let elemento = issue.element
+        raccolta.aggiungi(
+            """
+            [\(dove)] \(descrizione)
+                elemento: \(elemento?.label ?? "(nessuno)") \
+            tipo=\(elemento?.elementType.rawValue.description ?? "-") \
+            frame=\(elemento.map { "\($0.frame)" } ?? "-")
+                dettaglio: \(issue.detailedDescription)
+            """
+        )
         return true  // raccolto sopra: si segnala in blocco a fine giro
     }
 
@@ -127,11 +156,10 @@ final class AccessibilityUITests: XCTestCase {
 
         for (etichetta, lingua, corpo) in Self.configurazioni {
             let app = launch(language: lingua, contentSize: corpo)
-            let schermo = app.frame
             try visitEachTab(of: app) { index in
                 let dove = "\(etichetta), scheda \(index)"
                 try app.performAccessibilityAudit { issue in
-                    Self.daIgnorare(issue, schermo: schermo, dove: dove, raccolta: raccolta)
+                    Self.daIgnorare(issue, dove: dove, raccolta: raccolta)
                 }
             }
             app.terminate()

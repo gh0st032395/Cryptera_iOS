@@ -129,12 +129,26 @@ final class FileAccessTests: XCTestCase {
 
     // MARK: - Helper
 
+    /// `Documents/Inbox` su un device è **del sistema**: l'app ci legge e ci
+    /// cancella — che è tutto ciò che fa il codice di produzione — ma non può
+    /// crearla, e `createDirectory` fallisce con `NSFileWriteNoPermissionError`.
+    ///
+    /// Il test la crea solo per allestire lo scenario, quindi dove non si può
+    /// si salta con una ragione esplicita invece di fallire: la logica resta
+    /// coperta in simulatore, dove la cartella è creabile.
     private func inboxDirectory() throws -> URL {
         let documents = try XCTUnwrap(
             FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
         )
         let inbox = documents.appendingPathComponent("Inbox", isDirectory: true)
-        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
+        } catch {
+            throw XCTSkip(
+                "Documents/Inbox non è creabile qui (\(error.localizedDescription)): "
+                    + "su device la gestisce il sistema. Lo scenario è coperto in simulatore."
+            )
+        }
         return inbox
     }
 }

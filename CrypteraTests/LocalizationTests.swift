@@ -100,9 +100,23 @@ final class LocalizationTests: XCTestCase {
         let defaults = UserDefaults.standard
         defaults.set(SecurityProfile.paranoid.storageValue, forKey: PreferenceKey.securityProfile)
         defaults.set(IntegrityProfile.max.storageValue, forKey: PreferenceKey.integrityProfile)
+        // La compressione va **azzerata esplicitamente**: il test verifica che
+        // una preferenza non impostata ricada sul valore di serie, e non può
+        // dare per scontato che non lo sia. Sul simulatore appena creato è vero
+        // per caso; su un iPhone davvero usato le impostazioni sopravvivono
+        // nel container, e qui il test falliva leggendo la scelta dell'utente.
+        // `string(forKey:)` e non `object(forKey:)`: quest'ultima restituisce
+        // `Any?`, che non è `Sendable` e non può attraversare la closure di
+        // teardown sotto la concorrenza rigorosa di Swift 6.
+        let compressioneSalvata = defaults.string(forKey: PreferenceKey.payloadCompression)
+        defaults.removeObject(forKey: PreferenceKey.payloadCompression)
         addTeardownBlock {
             defaults.removeObject(forKey: PreferenceKey.securityProfile)
             defaults.removeObject(forKey: PreferenceKey.integrityProfile)
+            // Ripristinata: è una preferenza di chi usa il telefono, non del test.
+            if let compressioneSalvata {
+                defaults.set(compressioneSalvata, forKey: PreferenceKey.payloadCompression)
+            }
         }
 
         let current = EncryptionDefaults.current

@@ -1127,6 +1127,103 @@ non compariva.
 
 ---
 
+### Prima esecuzione su device reale (2026-07-26)
+
+Suite completa su **iPhone 14 Pro, iOS 26.5.2**, non in simulatore. Il profilo
+di firma era già presente (team `QLGKZY3S8Q`), quindi non è servito toccare
+`project.yml`: team e stile di firma si passano da riga di comando.
+
+```bash
+xcodebuild test -project Cryptera.xcodeproj -scheme Cryptera \
+  -destination 'platform=iOS,id=<udid>' \
+  DEVELOPMENT_TEAM=QLGKZY3S8Q CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates
+```
+
+**Primo giro: 15 test unitari e 1 UI rossi**, tutti verdi in simulatore. Cinque
+cause distinte, e vale la pena distinguerle perché una sola è un difetto
+dell'app.
+
+#### 1. Un difetto vero, invisibile per costruzione in simulatore
+
+`FileAccess.isInsideAppSandbox` confrontava i percorsi per prefisso di stringa.
+Su device il confronto falliva **sui percorsi non ancora creati** — cioè su ogni
+percorso di output — e si ricadeva su `isReadableFile`, falso per un file
+inesistente: un percorso dentro il container veniva giudicato fuori.
+
+La prima diagnosi era sbagliata. Avevo concluso che `NSHomeDirectory()` e
+`temporaryDirectory` rispondessero con prefissi diversi; misurato sul telefono,
+si normalizzano entrambi a `/var`. Il meccanismo vero è un altro:
+
+```
+tmp/                → /var/mobile/.../tmp            (esiste: /private tolto)
+tmp/non-ancora.bin  → /private/var/mobile/.../tmp/…  (non esiste: /private resta)
+```
+
+`resolvingSymlinksInPath()` toglie il prefisso `/private` **solo se il percorso
+corrisponde a un file esistente**. Da qui `canonicalPath`, che lo toglie in modo
+esplicito e uniforme. È il motivo per cui la prima correzione — risolvere i
+symlink su entrambi i lati — non aveva funzionato: su un percorso inesistente
+quella chiamata non fa nulla.
+
+**Impatto verificato: latente, non attivo.** Oggi gli output non passano da
+`withSecurityScope` e gli input sono security-scoped, quindi la guardia non
+viene attraversata. Ma era sbagliata, e in simulatore non lo sarebbe mai
+sembrata: lì i container non stanno sotto `/private`.
+
+#### 2. Il gate M7 falliva per un difetto del test
+
+`CrossCompatTests` ricavava il percorso relativo sottraendo stringhe, e con il
+`/private` di mezzo produceva `"/privatesotto/due.txt"`. L'app aveva decifrato
+correttamente. Ora si contano i componenti del percorso.
+
+Da annotare: **fino a questo giro il gate di rilascio non era mai stato
+eseguito su hardware reale.**
+
+#### 3, 4, 5. Ambiente, non codice
+
+- **Le impostazioni reali dell'utente** facevano fallire il test che verifica il
+  fallback di una preferenza *non impostata*: sul telefono quella preferenza
+  esiste. Ora il test l'azzera e la **ripristina** in teardown — è una scelta di
+  chi usa il telefono, non del test. Trappola già annotata dopo M5, ricomparsa
+  dove era più facile scordarsela.
+- **`Documents/Inbox` su device è del sistema**: l'app ci legge e ci cancella
+  (tutto ciò che fa il codice di produzione) ma non può crearla. Era il test ad
+  allestire lo scenario creandola: ora salta con una ragione esplicita.
+- **L'audit di accessibilità dava esiti diversi**: gli stessi colori risultano
+  "nearly passed" in simulatore e "Contrast failed" su iPhone, perché cambia lo
+  spazio colore della cattura. Il contrasto è stato tolto dall'audit — un test
+  che dipende dall'hardware non dice niente sul codice — ed è già misurato con
+  numeri esatti in `DesignSystemContrastTests`, che copre gli stessi casi.
+
+#### Un rilievo escluso con le prove, non per comodità
+
+Su device compare `Potentially inaccessible text` nelle Impostazioni. Nasce
+dall'analisi dell'immagine: `element` è `nil`, niente frame, niente testo —
+l'API non dice *cosa* segnala. Il dump completo dell'albero di quella schermata
+sull'iPhone mostra che ogni testo visibile **ha** il suo elemento, i menu
+compresi (`'Language, English'`, non solo il valore). Non esiste il testo non
+rappresentato che il rilievo descrive.
+
+È escluso perché non azionabile: un test che fallisce senza indicare su cosa
+intervenire insegna solo a ignorare i fallimenti. La domanda che pone resta
+aperta e si chiude con VoiceOver acceso, in M10.
+
+Dal dump è emerso anche che due icone della barra schede hanno per etichetta il
+nome grezzo del simbolo (`checkmark.shield.fill`, `gearshape.fill`) invece di una
+descrizione localizzata. Non è un difetto attivo — VoiceOver legge l'etichetta
+del pulsante che le contiene — ma è da controllare nella prova VoiceOver.
+
+**Esito finale: 110 unitari (1 saltato) e 26 UI verdi su device**, oltre ai 42
+Rust e alla suite in simulatore.
+
+#### Cosa questo giro *non* copre
+
+Il device serve soprattutto per ciò che qui non è stato ancora misurato, e che
+resta a M10: jetsam col profilo `Paranoid`, tempi reali di Argon2 sui tre
+profili, Data Protection sui file di lavoro, e VoiceOver realmente acceso.
+
+---
+
 ### M9 — dettaglio originale del piano
 
 - **Non riprodurre la UI desktop.** Pattern nativi: `NavigationStack`, `Form`, `List` `.insetGrouped`, sheet per i picker. `TabView` su iPhone, `NavigationSplitView` su iPad

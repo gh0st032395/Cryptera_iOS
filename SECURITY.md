@@ -122,7 +122,14 @@ Implementato:
 | `beginBackgroundTask` per chiudere pulito una sospensione | Assente |
 | `PrivacyInfo.xcprivacy` | Assente — va aggiunto prima della prima submission |
 | Preflight memoria in **decifratura** | Assente; in cifratura c'è |
-| Prova su device reale sotto Instruments | Non eseguita: il simulatore non ha i limiti jetsam |
+| Prova su device sotto Instruments (jetsam, tempi Argon2) | Non eseguita: il simulatore non ha i limiti di memoria |
+| Prova con VoiceOver realmente acceso | Non eseguita: l'audit automatico copre etichette e geometria, non l'ordine di lettura |
+
+La suite completa **è** stata eseguita su un iPhone 14 Pro (iOS 26.5.2), ed è
+verde. Quel giro ha però corretto un difetto che il simulatore non poteva
+mostrare — un controllo di appartenenza alla sandbox che rifiutava percorsi non
+ancora creati — quindi le voci qui sopra restano aperte: non sono state
+verificate, sono solo rimaste fuori da quel giro.
 
 Il codice errore `DEVICE_LOCKED` esiste ed è registrato nel log delle
 operazioni, ma non ha ancora un trattamento dedicato nell'interfaccia.

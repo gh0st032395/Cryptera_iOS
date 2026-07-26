@@ -261,17 +261,28 @@ final class CrossCompatTests: XCTestCase {
     }
 
     /// Mappa percorso relativo → contenuto, per confrontare due alberi.
+    ///
+    /// Il percorso relativo si ricava **contando i componenti**, non sottraendo
+    /// stringhe. La versione a stringhe funzionava in simulatore e sbagliava su
+    /// device: lì l'enumeratore restituisce percorsi già risolti
+    /// (`/private/var/...`) mentre la radice no (`/var/...`), il prefisso non
+    /// combaciava e il risultato era un nome incollato al pezzo di percorso
+    /// rimasto — `/privatesotto/due.txt`. Il confronto falliva quindi per una
+    /// ragione che non c'entra col formato, proprio nel test che fa da gate.
     private static func albero(di root: URL) throws -> [String: Data] {
         var risultato: [String: Data] = [:]
+        let radice = root.resolvingSymlinksInPath().standardizedFileURL
+        let componentiRadice = radice.pathComponents.count
         let enumerator = FileManager.default.enumerator(
-            at: root,
+            at: radice,
             includingPropertiesForKeys: [.isRegularFileKey]
         )
         for case let url as URL in enumerator ?? .init() {
             guard (try url.resourceValues(forKeys: [.isRegularFileKey])).isRegularFile == true else {
                 continue
             }
-            let relativo = url.path.replacingOccurrences(of: root.path + "/", with: "")
+            let componenti = url.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            let relativo = componenti.dropFirst(componentiRadice).joined(separator: "/")
             risultato[relativo] = try Data(contentsOf: url)
         }
         return risultato
