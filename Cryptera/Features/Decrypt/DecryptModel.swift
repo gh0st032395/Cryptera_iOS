@@ -57,7 +57,28 @@ final class DecryptModel {
     private var token: CancelToken?
     private var workspace: TemporaryWorkspace?
 
-    var canRun: Bool { header != nil && !password.isEmpty && !isRunning }
+    var canRun: Bool {
+        header != nil && !password.isEmpty && !isRunning && memoryProblem == nil
+    }
+
+    /// Il file è leggibile, ma questo dispositivo non ha memoria per aprirlo ora.
+    ///
+    /// È un caso diverso da `headerProblem`, e va detto diversamente: lì il file
+    /// non è un `.ecf` valido, qui lo è e il limite è del telefono.
+    ///
+    /// Soprattutto, **chi apre non ha scelto nulla**: i parametri di Argon2
+    /// arrivano dall'header, li ha decisi chi ha cifrato, e non sono
+    /// abbassabili — cambiarli cambierebbe la chiave derivata, cioè non
+    /// aprirebbe il file, lo renderebbe illeggibile. Il messaggio non può
+    /// quindi suggerire "scegli un profilo più leggero", che è il consiglio
+    /// giusto in cifratura e inutile qui.
+    var memoryProblem: String? {
+        guard let header, !header.meta.fitsInAvailableMemory else { return nil }
+        return L.t(
+            "Opening this file needs %@ of memory, more than this device can give right now. The amount was set when the file was encrypted and cannot be lowered. Close other apps and try again.",
+            SizeFormatter.string(header.meta.argon2MemoryBytes)
+        )
+    }
 
     /// L'estrazione ha senso solo se il payload è davvero un archivio.
     var offersExtraction: Bool { header?.summary.isTarContainer == true }
@@ -94,6 +115,17 @@ final class DecryptModel {
             headerProblem = ErrorPresenter.unexpected
         }
     }
+
+    #if DEBUG
+    /// Inietta un header senza passare da un file vero.
+    ///
+    /// Serve al preflight memoria: costruire un `.ecf` che chieda 64 GiB non è
+    /// possibile — nessun profilo arriva lì — e con i profili reali il test
+    /// direbbe soltanto ciò che il telefono su cui gira permette.
+    func applyHeaderForTesting(_ meta: MetaInfo) {
+        header = Header(meta: meta, summary: describeHeader(meta: meta))
+    }
+    #endif
 
     func selectKeyfile(_ url: URL) {
         keyfile = Selection(url: url)
@@ -195,7 +227,11 @@ final class DecryptModel {
             errorMessage = ErrorPresenter.message(for: error)
         } catch {
             discardWork()
-            errorMessage = ErrorPresenter.unexpected
+            // Non `unexpected`: qui arriva anche il preflight memoria, che ha
+            // un messaggio suo e sa dire quanta ne servirebbe. La schermata lo
+            // mostra già alla scelta del file, ma la memoria disponibile può
+            // essere calata nel frattempo.
+            errorMessage = ErrorPresenter.message(for: error)
         }
     }
 

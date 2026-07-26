@@ -105,6 +105,7 @@ public actor CrypteraEngine {
         onProgress: (@Sendable (OperationProgress) -> Void)? = nil
     ) async throws -> MetaInfo {
         configureIfNeeded()
+        try preflightMemory(forFileAt: request.inputPath)
         // I binding generati sono compilati dentro il modulo dell'app, e questi
         // metodi ne oscurano i nomi: Swift preferisce il metodo di istanza
         // anche con etichette diverse, quindi serve qualificare col modulo.
@@ -123,6 +124,7 @@ public actor CrypteraEngine {
         onProgress: (@Sendable (OperationProgress) -> Void)? = nil
     ) async throws -> MetaInfo {
         configureIfNeeded()
+        try preflightMemory(forFileAt: request.inputPath)
         return try await run(
             { listener in
                 try Cryptera.decrypt(request: request, listener: listener, token: token)
@@ -145,6 +147,26 @@ public actor CrypteraEngine {
             token: token,
             onProgress: onProgress
         )
+    }
+
+    // MARK: - Preflight
+
+    /// Rifiuta prima di derivare la chiave, se i parametri del file non ci stanno.
+    ///
+    /// Sta nel motore e non nelle schermate perché **Verify e Batch non leggono
+    /// l'header prima di partire**: guardando solo la schermata Decrypt, il
+    /// processo resterebbe uccidibile dalle altre due strade, e il difetto si
+    /// manifesterebbe come "l'app sparisce" senza alcun messaggio.
+    ///
+    /// Leggere l'header costa un'apertura di file e nessuna derivazione: è
+    /// l'operazione che la schermata Decrypt fa già alla scelta del file.
+    private func preflightMemory(forFileAt path: String) throws {
+        // Se l'header non è leggibile **non si decide qui**: l'errore vero —
+        // file corrotto, troncato, non un `.ecf` — lo produce l'operazione, ed
+        // è più preciso di qualunque cosa si possa dire adesso.
+        guard let meta = try? readMetadata(path: path) else { return }
+        guard !meta.fitsInAvailableMemory else { return }
+        throw InsufficientMemory(requiredBytes: meta.argon2MemoryBytes)
     }
 
     // MARK: - Esecuzione
@@ -182,22 +204,72 @@ public actor CrypteraEngine {
 
 // MARK: - Preflight memoria
 
+/// Il dispositivo non ha memoria per i parametri Argon2 di questo file.
+///
+/// Non è un `CrypteraError`: il core non c'entra e non è mai stato chiamato.
+/// Aggiungerne un caso all'enum FFI significherebbe toccare il confine con
+/// Rust — e quindi il desktop — per una condizione che esiste solo su iOS.
+public struct InsufficientMemory: Error {
+    /// Quanta ne serviva, per poterlo dire all'utente invece di un generico
+    /// "memoria insufficiente" che non aiuta a decidere cosa chiudere.
+    public let requiredBytes: UInt64
+}
+
+/// Regola unica: quanta memoria di Argon2 questo dispositivo può concedere ora.
+///
+/// Argon2 alloca un blocco contiguo; su iOS superare il limite jetsam
+/// **termina il processo senza eccezione catturabile** — dal punto di vista
+/// dell'utente l'app sparisce (SPEC §11.2). Meglio un errore esplicito.
+///
+/// I parametri **non vanno mai abbassati silenziosamente**: cambiare
+/// `argon2_mem` cambia la chiave derivata. In cifratura produrrebbe un file
+/// diverso da quello richiesto; in decifratura non produrrebbe proprio nulla,
+/// perché i parametri arrivano dall'header e non sono negoziabili.
+///
+/// Sta in un tipo suo e non su `SecurityProfile` perché la domanda si pone in
+/// due forme: da un profilo scelto dall'utente (cifratura) e da un numero letto
+/// nell'header (decifratura). Con la regola scritta su un solo lato, l'altro
+/// finirebbe per riscriverla con una soglia diversa.
+public enum MemoryPreflight {
+    /// Frazione del disponibile oltre la quale non ci si spinge.
+    /// Soglia prudenziale al 50%, come suggerito dalla spec.
+    private static let maxShare: UInt64 = 2
+
+    /// Memoria concedibile al processo, o `nil` se il sistema non sa dirlo —
+    /// il caso del simulatore, dove `os_proc_available_memory()` risponde 0.
+    public static var availableBytes: UInt64? {
+        let available = UInt64(os_proc_available_memory())
+        return available > 0 ? available : nil
+    }
+
+    /// Senza una stima **non si blocca**: rifiutare tutto dove il sistema non
+    /// risponde renderebbe l'app inutilizzabile proprio lì.
+    public static func fits(_ requiredBytes: UInt64) -> Bool {
+        guard let available = availableBytes else { return true }
+        return requiredBytes <= available / maxShare
+    }
+}
+
 extension SecurityProfile {
     /// Il profilo è eseguibile con la memoria attualmente disponibile?
-    ///
-    /// Argon2 alloca un blocco contiguo; su iOS superare il limite jetsam
-    /// **termina il processo senza eccezione catturabile** — dal punto di vista
-    /// dell'utente l'app sparisce (SPEC §11.2). Meglio un errore esplicito.
-    ///
-    /// Soglia prudenziale al 50% del disponibile, come suggerito dalla spec.
-    ///
-    /// I parametri **non vanno mai abbassati silenziosamente**: cambiare
-    /// `argon2_mem` cambia la chiave derivata, quindi produrrebbe un file
-    /// diverso da quello richiesto.
     public var fitsInAvailableMemory: Bool {
-        let required = securityProfileMemoryBytes(profile: self)
-        let available = UInt64(os_proc_available_memory())
-        guard available > 0 else { return true }  // stima non disponibile: non bloccare
-        return required <= available / 2
+        MemoryPreflight.fits(securityProfileMemoryBytes(profile: self))
+    }
+}
+
+extension MetaInfo {
+    /// Memoria che Argon2 richiederà per **questo file**, dai parametri scritti
+    /// nel suo header.
+    public var argon2MemoryBytes: UInt64 {
+        UInt64(argon2MemKib) * 1024
+    }
+
+    /// Il file è apribile con la memoria attualmente disponibile?
+    ///
+    /// A differenza della cifratura, qui non c'è nulla da scegliere: chi apre
+    /// il file subisce i parametri di chi l'ha creato. Il rifiuto va quindi
+    /// spiegato in quei termini, non come "scegli un profilo più leggero".
+    public var fitsInAvailableMemory: Bool {
+        MemoryPreflight.fits(argon2MemoryBytes)
     }
 }

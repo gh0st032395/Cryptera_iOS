@@ -98,6 +98,13 @@ struct DecryptView: View {
                 Notice(kind: .danger, text: problem, identifier: "decrypt.header.problem")
             }
 
+            // Il file è valido: il limite è del dispositivo, non suo. Compare
+            // **prima** della password, perché digitarla per poi vedersi
+            // rifiutare l'operazione è tempo perso su un esito già noto.
+            if let problem = model.memoryProblem {
+                Notice(kind: .warning, text: problem, identifier: "decrypt.memory.problem")
+            }
+
             if let header = model.header {
                 Divider()
                 metadata(header)

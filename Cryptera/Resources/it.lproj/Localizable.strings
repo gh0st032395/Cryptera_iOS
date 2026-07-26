@@ -104,6 +104,13 @@
 "Cryptera has no backdoor and no recovery mechanism: if you forget the password — and lose the keyfile, if you use one — the encrypted data is gone for good.\n\nKeep it somewhere safe, such as a password manager." = "Cryptera non ha backdoor né meccanismi di recupero: se dimentichi la password — e perdi il keyfile, se ne usi uno — i dati cifrati sono irrecuperabili per sempre.\n\nConservala in un posto sicuro, ad esempio un gestore di password.";
 "I understand, encrypt" = "Ho capito, cifra";
 
+// MARK: - Preflight memoria in decifratura (M10)
+//
+// I parametri di Argon2 arrivano dall'header: chi apre il file non li ha
+// scelti e non può abbassarli. Il messaggio lo dice, invece di suggerire un
+// profilo più leggero come si fa in cifratura.
+"Opening this file needs %@ of memory, more than this device can give right now. The amount was set when the file was encrypted and cannot be lowered. Close other apps and try again." = "Aprire questo file richiede %@ di memoria, più di quanta questo dispositivo possa concederne ora. La quantità è stata decisa al momento della cifratura e non è abbassabile: chiudi altre app e riprova.";
+
 // MARK: - Metadati e risultati
 
 "Result" = "Risultato";

@@ -175,7 +175,9 @@ final class BatchModel {
                 failed += 1
                 if case .Cancelled = error { break }
             } catch {
-                items[index].state = .failed(ErrorPresenter.unexpected)
+                // Non `unexpected`: qui arriva anche il preflight memoria, che
+                // ha un messaggio suo e sa dire quanta ne servirebbe.
+                items[index].state = .failed(ErrorPresenter.message(for: error))
                 failed += 1
             }
         }

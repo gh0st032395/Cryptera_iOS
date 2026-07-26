@@ -244,7 +244,9 @@ final class VerifyModel {
         } catch let error as CrypteraError {
             outcome = .failure(ErrorPresenter.message(for: error))
         } catch {
-            outcome = .failure(ErrorPresenter.unexpected)
+            // Non `unexpected`: qui arriva anche il preflight memoria, che ha
+            // un messaggio suo e sa dire quanta ne servirebbe.
+            outcome = .failure(ErrorPresenter.message(for: error))
         }
     }
 }

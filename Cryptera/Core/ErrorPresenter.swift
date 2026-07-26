@@ -14,6 +14,27 @@ enum ErrorPresenter {
 
     static var unexpected: String { L.t("Something went wrong.") }
 
+    /// Variante per gli errori che **non** vengono dal core.
+    ///
+    /// Serve perché il preflight memoria fallisce prima ancora di chiamare il
+    /// core, quindi non ha un `CrypteraError` da mappare: senza questa, quel
+    /// caso finirebbe nel `catch` generico e l'utente leggerebbe "qualcosa è
+    /// andato storto" davanti a un limite del suo telefono, che è la cosa che
+    /// SPEC §11.2 chiede espressamente di non fare.
+    static func message(for error: Error) -> String {
+        switch error {
+        case let error as CrypteraError:
+            return message(for: error)
+        case let error as InsufficientMemory:
+            return L.t(
+                "Opening this file needs %@ of memory, more than this device can give right now. The amount was set when the file was encrypted and cannot be lowered. Close other apps and try again.",
+                SizeFormatter.string(error.requiredBytes)
+            )
+        default:
+            return unexpected
+        }
+    }
+
     static func message(for error: CrypteraError) -> String {
         switch error {
 

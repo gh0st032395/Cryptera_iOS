@@ -1289,6 +1289,58 @@ osservato accadere. Serve un device che non lo regga, e non ne abbiamo uno.
 
 ---
 
+### M10 punto 4 — preflight memoria in decifratura (2026-07-26)
+
+In cifratura il profilo lo sceglie l'utente, e un rifiuto è un invito a
+sceglierne un altro. **In decifratura non c'è nulla da scegliere**: i parametri
+di Argon2 arrivano dall'header, li ha decisi chi ha cifrato, e non sono
+abbassabili — cambiarli cambierebbe la chiave derivata, cioè non aprirebbe il
+file, lo renderebbe illeggibile.
+
+Il messaggio lo dice in quei termini, e un test verifica che **non** contenga
+la parola "profilo": è il consiglio giusto in cifratura e inutile qui.
+
+La regola aritmetica è la stessa, e ora sta in un punto solo
+(`MemoryPreflight`). Se `SecurityProfile` e `MetaInfo` avessero due soglie
+proprie, un file cifrato con un profilo *accettato* potrebbe risultare
+rifiutato all'apertura sullo stesso telefono: l'app produrrebbe file che poi si
+rifiuta di aprire. C'è un test che confronta le due risposte.
+
+#### Il controllo sta nel motore, non nella schermata
+
+La prima versione lo metteva in `DecryptModel`, dove l'header è già letto e il
+messaggio può comparire **prima** della password. Ma **Verify e Batch non
+leggono l'header prima di partire**: il processo sarebbe rimasto uccidibile da
+quelle due strade, con il difetto che si manifesta come "l'app sparisce" e
+nessun messaggio.
+
+`CrypteraEngine` fa quindi il preflight per decrypt e verify — un'apertura di
+file e nessuna derivazione — e il batch è coperto perché passa di lì. La
+schermata Decrypt mantiene in più l'avviso anticipato, che è UX, non sicurezza.
+
+Se l'header non è leggibile il preflight **non decide**: l'errore vero (file
+corrotto, troncato, non un `.ecf`) lo produce l'operazione ed è più preciso.
+
+#### Non è un `CrypteraError`
+
+`InsufficientMemory` è un errore Swift: il core non c'entra e non è mai stato
+chiamato. Aggiungere un caso all'enum FFI significherebbe toccare il confine
+con Rust — e quindi il desktop — per una condizione che esiste solo su iOS.
+
+Serviva però che i tre `catch` generici smettessero di rispondere "qualcosa è
+andato storto", che è esattamente ciò che SPEC §11.2 chiede di non fare davanti
+a un limite del dispositivo. `ErrorPresenter` ha ora una variante per gli errori
+che non vengono dal core.
+
+#### I test si completano fra i due ambienti
+
+In simulatore ne saltano 3 (`os_proc_available_memory()` risponde 0, quindi il
+preflight per scelta non blocca), su device 1 (quello che verifica proprio il
+comportamento senza stima). Nessuno dei due ambienti li esegue tutti, e insieme
+coprono entrambi i rami.
+
+---
+
 ### M10 punto 3 — Data Protection e copertura privacy (2026-07-26)
 
 #### La protezione va sulla cartella, non sui file
