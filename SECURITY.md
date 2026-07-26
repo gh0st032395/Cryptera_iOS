@@ -122,13 +122,18 @@ Implementato:
 
 | Ambito | Stato |
 |---|---|
-| Prova su device sotto Instruments (jetsam, tempi Argon2) | Non eseguita: il simulatore non ha i limiti di memoria |
-| Prova con VoiceOver realmente acceso | Non eseguita: l'audit automatico copre etichette e geometria, non l'ordine di lettura |
+| `ITSAppUsesNonExemptEncryption` | **Non dichiarata.** È export compliance, non implementazione: finché la posizione non è presa, nell'`Info.plist` resta un commento — una chiave sbagliata lì è peggio di una assente |
 
 La suite completa gira su un **iPhone 14 Pro (iOS 26.5.2)** ed è verde, e le
 classi di Data Protection sono verificate lì — in simulatore quei test saltano,
-perché il filesystem non riporta affatto la classe. Le voci qui sopra restano
-comunque aperte: non sono state verificate, sono rimaste fuori.
+perché il filesystem non riporta affatto la classe.
+
+Le due verifiche non automatizzabili sono state **eseguite a mano** sullo stesso
+device e riferite come superate: VoiceOver acceso sulle cinque schermate
+(ordine di lettura, progresso udibile, errori annunciati) e app in secondo piano
+durante un'operazione lunga (la miniatura di sistema mostra la copertura, senza
+nomi di file). Sono annotate come prove eseguite una volta, non come garanzie
+che un test ripete a ogni esecuzione.
 
 Il codice errore `DEVICE_LOCKED` esiste ed è registrato nel log delle
 operazioni, ma non ha ancora un trattamento dedicato nell'interfaccia.

@@ -21,7 +21,7 @@ Licenza: **MIT OR Apache-2.0** (stessa doppia licenza dell'upstream).
 
 ## Stato
 
-🚧 **In sviluppo.** M1–M9 completate; non ancora distribuita.
+🚧 **In sviluppo.** M1–M9 completate, M10 quasi; non ancora distribuita.
 
 **M7 — il gate di rilascio — è verde.** Otto file prodotti dall'applicazione
 desktop vengono letti dal codice iOS con confronto byte per byte a ogni
@@ -41,10 +41,10 @@ d'integrità e registro delle operazioni, in inglese e italiano, su iPhone e iPa
 | M7 — Round-trip incrociato (**gate di rilascio**) | ✅ 8 file del desktop letti byte per byte |
 | M8 — Batch + Audit | ✅ coda e registro delle operazioni |
 | M9 — Design system | ✅ accessibilità verificata, iPad, icona adattiva |
-| M10 — Hardening | ⬜ richiede un device reale |
+| M10 — Hardening | 🔶 codice completo e verificato su device; resta la dichiarazione di export compliance |
 | M11 — Distribuzione TestFlight | ⬜ richiede Apple Developer Program |
 
-**178 test verdi**: 42 Rust, 110 XCTest, 26 UI test.
+**197 test verdi**: 42 Rust, 128 XCTest, 27 UI test — su iPhone 14 Pro e in simulatore.
 
 Roadmap completa in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md);
 specifica di implementazione in [`SPEC.md`](SPEC.md).
@@ -196,8 +196,9 @@ Il contrasto dei colori è misurato alla sorgente con la formula WCAG 2.1
 cui il verde dell'accento su fondo chiaro **è più scuro di quello del desktop**:
 il valore dell'upstream faceva 2,9:1 come testo, sotto la soglia AA.
 
-Resta da fare una prova con VoiceOver realmente acceso su un device: l'audit
-automatico copre etichette, contrasto e geometria, non l'ordine di lettura.
+La prova con **VoiceOver realmente acceso** è stata eseguita su iPhone 14 Pro:
+l'audit automatico copre etichette, contrasto e geometria, non l'ordine di
+lettura, e quello si controlla solo ascoltando.
 
 ---
 
@@ -207,9 +208,12 @@ automatico copre etichette, contrasto e geometria, non l'ordine di lettura.
   Verificato automaticamente sul binario prodotto.
 - Nessun aggiornamento in-app: vietato su App Store, e l'updater firmato del
   desktop non è stato portato.
-- `PrivacyInfo.xcprivacy`: **da aggiungere** prima della prima submission (M10).
-- `ITSAppUsesNonExemptEncryption`: posizione da verificare e documentare qui
-  **prima** della prima submission (SPEC §14.1).
+- `PrivacyInfo.xcprivacy`: presente, dichiara nessun dato raccolto e nessun
+  tracciamento. `check-release-bundle.sh` verifica che resti nel bundle.
+- `ITSAppUsesNonExemptEncryption`: **non ancora dichiarata.** È export
+  compliance, non implementazione: finché la posizione non è presa
+  nell'`Info.plist` resta un commento, perché una chiave sbagliata lì è peggio
+  di una chiave assente (SPEC §14.1).
 
 Limiti noti e modello di sicurezza in [`SECURITY.md`](SECURITY.md), incluso il
 punto in cui questo porting è più debole del desktop: la password in memoria non

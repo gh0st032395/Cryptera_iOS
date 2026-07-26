@@ -1289,6 +1289,33 @@ osservato accadere. Serve un device che non lo regga, e non ne abbiamo uno.
 
 ---
 
+### M10 — prove manuali, eseguite (2026-07-26)
+
+Le due verifiche che nessun test automatico può sostituire, **eseguite da
+Simone su iPhone 14 Pro e riferite come superate**. Sono annotate come tali, non
+come osservate da chi scrive: chi rileggerà deve poter distinguere ciò che un
+test dimostra a ogni esecuzione da ciò che una persona ha visto una volta.
+
+**VoiceOver acceso** — percorse le cinque schermate. Ordine di lettura sensato;
+la robustezza della password e il motivo del blocco vengono annunciati; il
+progresso di un'operazione lunga è udibile; gli errori sono annunciati. Nessuna
+lettura dei nomi grezzi dei simboli (`checkmark.shield.fill`,
+`gearshape.fill`): VoiceOver legge l'etichetta del pulsante che li contiene, e
+il sospetto sollevato dal dump dell'albero in M9 non si è confermato.
+
+**App in secondo piano durante un'operazione lunga** (cartella, profilo
+Paranoid) — la miniatura nel selettore mostra la copertura privacy, senza nomi
+di file. Al ritorno l'operazione non resta in uno stato ambiguo, e non viene
+lasciato alcun output parziale salvabile.
+
+Con queste, tutto ciò che in M10 era verificabile è verificato. **Resta aperta
+una sola voce, e non è un test**: `ITSAppUsesNonExemptEncryption` (§14.1), che è
+una dichiarazione di export compliance e non una scelta di implementazione.
+Finché non è presa, nell'`Info.plist` resta il commento — che è la cosa corretta,
+perché una chiave sbagliata lì è peggio di una chiave assente.
+
+---
+
 ### M12 — Nota cifrata (proposta, 2026-07-26)
 
 Scrivere una nota testuale dentro l'app, cifrarla, e rileggerla decifrandola.
