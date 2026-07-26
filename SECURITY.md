@@ -115,13 +115,13 @@ Implementato:
 | File di lavoro e temporanei | `.completeUnlessOpen` sulla cartella, ereditata dai file che vi crea il core. Non `.complete`: un'operazione in corso mentre lo schermo si spegne fallirebbe a metà |
 | Miniatura di sistema in secondo piano | Coperta da una schermata neutra a partire da `.inactive`, cioè prima che iOS la scatti: non vi compaiono nomi di file |
 | Memoria in **decifratura** | Verificata sui parametri dell'header prima di derivare la chiave, per decrypt, verify e batch. Il rifiuto spiega che la quantità l'ha decisa chi ha cifrato e non è abbassabile: chi apre non ha scelto nulla |
+| Manifesto di privacy | `PrivacyInfo.xcprivacy`: nessun dato raccolto, nessun tracciamento. Le API a motivazione obbligatoria dichiarate sono quelle **realmente usate** — UserDefaults, spazio disco, metadati dei file — ricavate cercandole nel codice. `check-release-bundle.sh` verifica che il manifesto sia nel bundle e continui a dichiarare zero raccolta |
 
 **Non ancora implementato** (M10 — vedi
 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)):
 
 | Ambito | Stato |
 |---|---|
-| `PrivacyInfo.xcprivacy` | Assente — va aggiunto prima della prima submission |
 | Prova su device sotto Instruments (jetsam, tempi Argon2) | Non eseguita: il simulatore non ha i limiti di memoria |
 | Prova con VoiceOver realmente acceso | Non eseguita: l'audit automatico copre etichette e geometria, non l'ordine di lettura |
 

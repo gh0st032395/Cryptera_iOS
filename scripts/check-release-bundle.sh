@@ -62,6 +62,34 @@ else
   echo "   ok"
 fi
 
+# Il manifesto di privacy deve **essere nel bundle e dichiarare zero raccolta**.
+#
+# È un file che si aggiunge una volta e non si guarda più: se un giorno
+# smettesse di essere incluso — rinominato, spostato, escluso da una regola di
+# build — non lo scoprirebbe nessuno fino al rifiuto in fase di submission, cioè
+# nel momento peggiore.
+echo "==> Manifesto di privacy presente e coerente"
+MANIFEST="$APP/PrivacyInfo.xcprivacy"
+if [[ ! -f "$MANIFEST" ]]; then
+  echo "   FALLITO: PrivacyInfo.xcprivacy assente dal bundle" >&2
+  FAIL=1
+elif ! plutil -lint "$MANIFEST" >/dev/null 2>&1; then
+  echo "   FALLITO: PrivacyInfo.xcprivacy non è un plist valido" >&2
+  FAIL=1
+else
+  # `NSPrivacyCollectedDataTypes` vuoto è l'affermazione centrale dell'app: se
+  # un giorno comparisse una voce, deve essere una decisione, non una svista.
+  RACCOLTI=$(plutil -extract NSPrivacyCollectedDataTypes raw -o - "$MANIFEST" 2>/dev/null || echo "?")
+  TRACKING=$(plutil -extract NSPrivacyTracking raw -o - "$MANIFEST" 2>/dev/null || echo "?")
+  if [[ "$RACCOLTI" != "0" || "$TRACKING" != "false" ]]; then
+    echo "   FALLITO: il manifesto dichiara raccolta dati o tracciamento" >&2
+    echo "     tipi di dato raccolti: $RACCOLTI · tracking: $TRACKING" >&2
+    FAIL=1
+  else
+    echo "   ok"
+  fi
+fi
+
 if [[ $FAIL -ne 0 ]]; then
   echo "==> Controlli falliti" >&2
   exit 1

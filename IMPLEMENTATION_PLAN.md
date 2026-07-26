@@ -1289,6 +1289,89 @@ osservato accadere. Serve un device che non lo regga, e non ne abbiamo uno.
 
 ---
 
+### M12 — Nota cifrata (proposta, 2026-07-26)
+
+Scrivere una nota testuale dentro l'app, cifrarla, e rileggerla decifrandola.
+**Decisa la direzione, non ancora pianificata in dettaglio.**
+
+#### Non tocca il formato
+
+Una nota è un file di testo: cifrarla produce un `.ecf` ordinario, che il
+desktop apre restituendo un `.txt`. Nessuna modifica al formato, nessun rischio
+di divergenza.
+
+Il formato ha due bit di flag riservati (`0x04`, `0x80`) e sarebbe stato
+possibile marcare le note con uno di quelli. **Scartato**: marcare significa
+toccare `crypto_core_rs`, quindi il desktop, per una funzione che il desktop non
+ha — cioè esattamente la divergenza silenziosa che il progetto teme.
+
+#### L'app non riconosce le note: le offre
+
+Scelta fra tre possibilità (bit nel formato, convenzione sul nome, offerta in
+base al contenuto), vince la terza: all'apertura, se il payload è piccolo e
+UTF-8 valido, la schermata propone «mostra come testo» **accanto a** «salva
+file».
+
+Non richiede nulla, non rompe nulla, e funziona meglio delle alternative: una
+nota scritta come `.txt` sul desktop diventa leggibile come nota su iPhone
+senza che nessuno l'abbia progettato. Il file resta un file; è l'app che sa
+presentarlo in due modi.
+
+Nell'interfaccia, «Nota» diventa la **terza sorgente** del selettore
+File/Cartella già presente in Cifra: nessuna sesta scheda, e password, profili
+e output restano quelli.
+
+#### Il vincolo di sicurezza, e cosa è davvero ottenibile
+
+Il requisito posto è che nulla resti in chiaro e che le stringhe siano
+azzerabili — password comprese. Va diviso in due parti, perché una è
+raggiungibile e l'altra no.
+
+**Raggiungibile, e da fare:**
+
+- **Nessuna bozza in chiaro, mai.** Il testo in scrittura vive solo in memoria.
+  Nessun salvataggio automatico, nessun ripristino dopo un riavvio: sarebbe una
+  nota in chiaro su disco, cioè precisamente ciò che l'app esiste per evitare.
+  Va scritto come **divieto**, non lasciato al buon senso di chi tocca il codice
+  dopo.
+- Il file temporaneo che diventa payload va in `TemporaryWorkspace`, che ha già
+  `.completeUnlessOpen` e viene ripulito.
+- Tastiera senza correzione automatica né testo predittivo: il sistema impara
+  da ciò che si digita, e una nota cifrata non deve finire nel dizionario
+  personale.
+- Ridurre **durata e numero di copie**: non tenere il segreto in una proprietà
+  del modello per tutta la sessione, convertirlo in un buffer azzerabile il
+  prima possibile e azzerare quello.
+
+**Non raggiungibile, e va detto invece di prometterlo:** una `String` Swift
+**non è azzerabile**, e non esiste modo di aggirarlo restando su SwiftUI. Il
+testo digitato attraversa il campo di input, la tastiera di sistema e il
+runtime prima di arrivare al nostro codice, e in tutti quei passaggi è una
+`String`/`NSString` la cui memoria non è nostra da sovrascrivere. Un campo di
+testo "sicuro" scritto da noi non cambierebbe nulla: la tastiera consegna
+comunque testo in quella forma.
+
+Quindi: si può **ridurre molto l'esposizione**, non eliminarla. È lo stesso
+limite già documentato in `SECURITY.md` per le password — con la differenza che
+lì il segreto è la chiave, qui è il contenuto.
+
+Se l'azzeramento garantito è un requisito irrinunciabile, la conseguenza non è
+"scrivere più codice": è che il modello di minaccia della funzione va ristretto
+(nessuna protezione contro chi esegue codice nel processo o preleva un dump di
+memoria), oppure la funzione non va fatta. **È una decisione di prodotto e va
+presa prima di implementare.**
+
+#### Altre cose emerse, da non dimenticare
+
+- Una nota mostrata **è catturabile con uno screenshot**: `SecureField` protegge
+  le password, una vista di testo no. La copertura privacy protegge la miniatura
+  di sistema, non uno screenshot volontario.
+- Vale la pena chiedersi se la funzione debba esistere anche sul desktop. I
+  formati resterebbero allineati comunque, ma le due app divergerebbero come
+  capacità — e finora la direzione è sempre stata l'opposta.
+
+---
+
 ### M10 punto 4 — preflight memoria in decifratura (2026-07-26)
 
 In cifratura il profilo lo sceglie l'utente, e un rifiuto è un invito a

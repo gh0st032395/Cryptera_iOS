@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Manifesto di privacy (SPEC §14.1).
+
+  Nessun dato raccolto e nessun tracciamento: l'app non fa richieste di rete —
+  verificato automaticamente sul binario da scripts/check-release-bundle.sh, che
+  fallisce se compare un framework di rete.
+
+  Le API "a motivazione obbligatoria" sono dichiarate perché **usate davvero**,
+  non per prudenza: sono state ricavate cercandole nel codice, non elencando
+  quelle plausibili. Una dichiarazione di comodo è comunque una dichiarazione
+  falsa, e qui è anche inutile — nessuna di queste serve a profilare.
+-->
+<plist version="1.0">
+<dict>
+    <key>NSPrivacyTracking</key>
+    <false/>
+
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <!-- Nessun dato raccolto, di nessun tipo. -->
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <!--
+          UserDefaults: lingua, tema, predefiniti di cifratura, avviso di
+          irreversibilità già mostrato. Solo dati dell'app stessa, mai
+          condivisi né usati per identificare l'utente.
+        -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+
+        <!--
+          Spazio disco: `volumeAvailableCapacityForImportantUsage`, letto prima
+          di cifrare una cartella. Serve a rifiutare in anticipo un'operazione
+          che riempirebbe il dispositivo, non a mostrare statistiche.
+        -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>85F4.1</string>
+            </array>
+        </dict>
+
+        <!--
+          Metadati dei file (`fileSizeKey`): la dimensione dell'input, per la
+          stima dello spazio necessario e per il registro delle operazioni.
+          Due motivazioni perché i file sono di due provenienze: dentro il
+          container dell'app (C617.1) e scelti dall'utente col selettore di
+          sistema (3B52.1).
+        -->
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>C617.1</string>
+                <string>3B52.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
