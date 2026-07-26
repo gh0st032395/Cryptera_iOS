@@ -117,8 +117,22 @@ final class DecryptFlowUITests: XCTestCase {
             conferma.exists,
             "il picker di sistema non si è aperto (o il dispositivo non è in italiano né in inglese)"
         )
+        // Il nome proposto va **atteso**, non letto subito.
+        //
+        // Che il pulsante di conferma esista non significa che il picker abbia
+        // finito di disegnarsi: sono due elementi distinti dello stesso foglio
+        // di sistema, e il campo del nome compare dopo. In locale la differenza
+        // è impercettibile e `.exists` passava; su una macchina più lenta —
+        // il runner della CI — il controllo arrivava prima del campo e il test
+        // falliva sostenendo che il picker propone il nome sbagliato, che è la
+        // diagnosi opposta a quella vera.
+        //
+        // Il nome può comparire come etichetta o come campo modificabile a
+        // seconda della versione di iOS, quindi si attendono entrambe le forme.
+        let etichetta = app.staticTexts["secret-note"]
+        let campo = app.textFields["secret-note"]
         XCTAssertTrue(
-            app.staticTexts["secret-note"].exists || app.textFields["secret-note"].exists,
+            etichetta.waitForExistence(timeout: 15) || campo.waitForExistence(timeout: 5),
             "il picker deve proporre il nome originale, non quello del file cifrato"
         )
     }
