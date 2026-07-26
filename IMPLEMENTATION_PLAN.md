@@ -1278,7 +1278,7 @@ emerso solo eseguendolo anche in simulatore dopo averlo scritto per il device �
 la prima versione asseriva `richiesta ≤ disponibile / 2` e falliva contro uno
 zero.
 
-#### Cosa **non** è dimostrato
+#### Cosa **non** è dimostrato (memoria)
 
 Le misure vengono da un device con 6 GB di RAM, non sotto pressione di memoria.
 Dicono che il **meccanismo** è corretto — il modello predice il consumo, la
@@ -1286,6 +1286,54 @@ soglia è rispettata, non c'è accumulo — non che `Paranoid` sia sicuro ovunqu
 Su un device più piccolo o sotto pressione, `os_proc_available_memory()`
 risponde meno e il preflight rifiuta: è il comportamento voluto, ma non è stato
 osservato accadere. Serve un device che non lo regga, e non ne abbiamo uno.
+
+---
+
+### M10 punto 2 — sospensione e checkpoint puliti (2026-07-26)
+
+`Cryptera/Core/OperationLifetime.swift` tiene l'app sveglia e viva per la
+durata di un'operazione. Due problemi con la stessa causa — iOS sospende ciò
+che non sta visibilmente lavorando:
+
+- **Lo schermo si spegne durante l'operazione.** Cifrare una cartella grande
+  richiede minuti in cui l'utente non tocca nulla: senza `isIdleTimerDisabled`
+  il telefono si blocca da solo e sospende l'app a metà lavoro, per
+  un'inattività che inattività non è.
+- **L'app va in secondo piano.** Senza background task iOS concede pochi
+  secondi e poi sospende il processo *dove si trova*, cioè potenzialmente a
+  metà di una scrittura.
+
+**Il valore del background task non sono i secondi in più, è l'avviso di
+scadenza.** Alla scadenza si **annulla** l'operazione invece di lasciarla
+sospendere: la cancellazione ha già un percorso di pulizia che rimuove l'output
+parziale (coperto da test dai tempi di M5), mentre una sospensione a metà
+scrittura lascerebbe un `.ecf` troncato — un archivio che sembra esserci e non
+si apre.
+
+Sta in `CrypteraEngine.run`, il punto da cui passano **tutte** le operazioni.
+Più in alto andrebbe scritto tre volte (Cifra, Decifra, Batch), e la copia
+dimenticata sarebbe quella che lascia il telefono bloccarsi a metà cifratura.
+
+È un **contatore**, non un booleano: il batch esegue in sequenza, e con un
+booleano la fine del primo file spegnerebbe il blocco schermo mentre gli altri
+stanno ancora lavorando. Il contatore non scende sotto zero — uno
+sbilanciamento lascerebbe un background task mai chiuso, che iOS punisce
+terminando l'app, con il sintomo lontano dalla causa.
+
+#### Cosa era già a posto
+
+L'output parziale **non era a rischio**: tutti e tre i flussi scrivono in
+`TemporaryWorkspace`, sotto `tmp/cryptera-work/`, che `purgeStale()` rimuove
+all'avvio successivo. Il punto 2 non era quindi "i dati sono in pericolo" ma
+"l'operazione viene troncata invece che chiusa".
+
+#### Cosa **non** è verificato
+
+La scadenza del background task **non è provocabile in un test**: iOS la
+concede quando vuole. Il test la simula chiamando lo stesso percorso che iOS
+invocherebbe, quindi verifica la nostra reazione — l'annullamento — non che
+iOS ci avvisi davvero. Quello si vede solo mettendo l'app in background durante
+un'operazione lunga, a mano.
 
 ---
 

@@ -112,6 +112,7 @@ public actor CrypteraEngine {
             { listener in
                 try Cryptera.verify(request: request, listener: listener, token: token)
             },
+            token: token,
             onProgress: onProgress
         )
     }
@@ -126,6 +127,7 @@ public actor CrypteraEngine {
             { listener in
                 try Cryptera.decrypt(request: request, listener: listener, token: token)
             },
+            token: token,
             onProgress: onProgress
         )
     }
@@ -140,6 +142,7 @@ public actor CrypteraEngine {
             { listener in
                 try Cryptera.encrypt(request: request, listener: listener, token: token)
             },
+            token: token,
             onProgress: onProgress
         )
     }
@@ -148,8 +151,22 @@ public actor CrypteraEngine {
 
     private func run(
         _ body: @escaping @Sendable (ProgressListener?) throws -> MetaInfo,
+        token: CancelToken?,
         onProgress: (@Sendable (OperationProgress) -> Void)?
     ) async throws -> MetaInfo {
+        // Schermo sveglio e background task per tutta la durata (SPEC §11.1).
+        // Sta qui e non nelle schermate perché `run` è il punto in cui passano
+        // *tutte* le operazioni: messo più in alto andrebbe scritto tre volte,
+        // e la copia dimenticata sarebbe quella che lascia il telefono a
+        // bloccarsi a metà cifratura.
+        await OperationLifetime.shared.begin(token: token)
+        defer {
+            // Non `await`: il defer è sincrono. Il rilascio è comunque
+            // garantito — questo blocco viene eseguito anche su errore e su
+            // cancellazione, che è il caso in cui contava di più.
+            Task { @MainActor in OperationLifetime.shared.end(token: token) }
+        }
+
         let listener = onProgress.map(ProgressBridge.init)
         return try await withCheckedThrowingContinuation { continuation in
             queue.async {

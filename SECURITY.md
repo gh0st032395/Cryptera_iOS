@@ -110,7 +110,8 @@ Implementato:
 |---|---|
 | Registro operazioni | `.completeFileProtection` |
 | Output decifrati di sessioni interrotte | Cancellati all'avvio successivo |
-| Memoria prima di avviare | Verificata con `os_proc_available_memory()`; il profilo viene rifiutato se non ci sta, mai abbassato in silenzio |
+| Memoria prima di avviare | Verificata con `os_proc_available_memory()`; il profilo viene rifiutato se non ci sta, mai abbassato in silenzio. Misurata su device: il modello predice il consumo reale al MiB |
+| Operazione interrotta da una sospensione | L'app chiede a iOS tempo aggiuntivo; alla scadenza **annulla** invece di lasciarsi sospendere a metà scrittura, così l'output parziale viene rimosso e non resta un `.ecf` troncato |
 
 **Non ancora implementato** (M10 — vedi
 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)):
@@ -119,7 +120,6 @@ Implementato:
 |---|---|
 | Data Protection sui file di lavoro e temporanei | Restano al valore predefinito del container; `.completeUnlessOpen` non è ancora impostata |
 | Overlay sullo snapshot di sistema in background | Assente — la miniatura salvata da iOS può contenere nomi di file |
-| `beginBackgroundTask` per chiudere pulito una sospensione | Assente |
 | `PrivacyInfo.xcprivacy` | Assente — va aggiunto prima della prima submission |
 | Preflight memoria in **decifratura** | Assente; in cifratura c'è |
 | Prova su device sotto Instruments (jetsam, tempi Argon2) | Non eseguita: il simulatore non ha i limiti di memoria |
