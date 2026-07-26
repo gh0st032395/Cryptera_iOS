@@ -1219,8 +1219,73 @@ Rust e alla suite in simulatore.
 #### Cosa questo giro *non* copre
 
 Il device serve soprattutto per ciò che qui non è stato ancora misurato, e che
-resta a M10: jetsam col profilo `Paranoid`, tempi reali di Argon2 sui tre
-profili, Data Protection sui file di lavoro, e VoiceOver realmente acceso.
+resta a M10: Data Protection sui file di lavoro, checkpoint puliti alla
+sospensione, e VoiceOver realmente acceso.
+
+---
+
+### M10 punto 1 — memoria e jetsam, misurati su device (2026-07-26)
+
+`CrypteraTests/MemoriaSuDeviceTests` misura invece di supporre. **I test
+stampano numeri e asseriscono solo ciò che non dipende dallo stato del
+telefono**: una soglia assoluta fallirebbe perché era aperta un'altra app, e
+non direbbe niente sul codice.
+
+Misure su **iPhone 14 Pro, iOS 26.5.2**, file da 4 KiB (così il tempo è tutto
+Argon2 e non I/O):
+
+| Profilo | Tempo | Crescita del picco | Richiesta dichiarata |
+|---|---|---|---|
+| Standard | 0,10 s | +64 MiB | 64 MiB |
+| Strong | 0,77 s | +258 MiB | 256 MiB |
+| Paranoid | 2,54 s | +512 MiB | 512 MiB |
+
+**Il modello di memoria è esatto.** `securityProfileMemoryBytes` predice la
+crescita reale del picco al MiB: il preflight non poggia su una stima
+prudenziale ma sul valore vero. Con 3049 MiB disponibili al processo, `Paranoid`
+ne usa il 16,8% — molto sotto la soglia del 50% — e **nessun profilo ha fatto
+scattare jetsam**.
+
+Misurare il picco ha richiesto un campionatore. Leggere l'impronta prima e dopo
+**non basta**: Argon2 libera il blocco prima che l'operazione ritorni, e la
+lettura finale può risultare *più bassa* di quella iniziale — con `Paranoid`
+scendeva da 347 a 280 MiB e il picco non compariva da nessuna parte.
+
+#### Il batch non accumula
+
+Domanda che riguarda M8: le operazioni girano in sequenza nello stesso processo,
+e fra un profilo e l'altro l'impronta di base non torna al valore iniziale
+(23 → 89 → 347 MiB). Se quel residuo si sommasse a ogni file, una coda lunga
+finirebbe per superare il limite — e jetsam non è un errore mostrabile, è
+l'app che sparisce a metà lavoro.
+
+Ripetendo `Paranoid` cinque volte il picco è **piatto**: 538, 539, 539, 538,
+538 MiB, crescita zero. L'allocatore riusa le pagine liberate invece di
+chiederne altre. Il test asserisce questo — che il picco non cresca di
+iterazione in iterazione — e non un valore assoluto.
+
+#### In simulatore la domanda non è ponibile
+
+`os_proc_available_memory()` in **simulatore risponde 0**: non è implementata.
+Non è un difetto da correggere — è la conferma che questi test hanno senso solo
+su device. `fitsInAvailableMemory` tratta già lo zero come "stima non
+disponibile" e **non blocca**, che è la scelta giusta: rifiutare tutto per
+mancanza di una stima renderebbe l'app inutilizzabile proprio dove quella
+chiamata non risponde.
+
+Il test salta con quella ragione invece di asserire su un numero inesistente. È
+emerso solo eseguendolo anche in simulatore dopo averlo scritto per il device —
+la prima versione asseriva `richiesta ≤ disponibile / 2` e falliva contro uno
+zero.
+
+#### Cosa **non** è dimostrato
+
+Le misure vengono da un device con 6 GB di RAM, non sotto pressione di memoria.
+Dicono che il **meccanismo** è corretto — il modello predice il consumo, la
+soglia è rispettata, non c'è accumulo — non che `Paranoid` sia sicuro ovunque.
+Su un device più piccolo o sotto pressione, `os_proc_available_memory()`
+risponde meno e il preflight rifiuta: è il comportamento voluto, ma non è stato
+osservato accadere. Serve un device che non lo regga, e non ne abbiamo uno.
 
 ---
 
@@ -1264,7 +1329,7 @@ profili, Data Protection sui file di lavoro, e VoiceOver realmente acceso.
 |---|---|---|
 | ~~`xz2`/`liblzma` non cross-compila~~ | ~~Alto~~ | ✅ **rientrato in M1** — compila senza interventi |
 | Deployment target ereditato dall'SDK (26.5) | Medio — escluderebbe quasi tutti i device, e il build **riesce comunque** | `IPHONEOS_DEPLOYMENT_TARGET=17.0` su tutti i target + verifica `otool -l \| grep minos` nello script |
-| Jetsam su profilo `Paranoid` (512 MiB) | **Alto** — l'app "sparisce" senza eccezione catturabile | Check memoria preventivo, profilo disabilitato sui device che non lo reggono |
+| ~~Jetsam su profilo `Paranoid` (512 MiB)~~ | ~~**Alto**~~ | ✅ **misurato su device (2026-07-26)** — vedi sotto. Il meccanismo regge; resta il caso dei device più piccoli |
 | Security scope chiuso troppo presto | Medio — `IO_ERROR` intermittenti, difficili da diagnosticare | Helper unico `withSecurityScope`, mai duplicato |
 | Divergenza silenziosa di formato | **Critico** — file illeggibili dal desktop | M7 come gate; nessuna primitiva reimplementata in Swift |
 | Progress senza throttling | Medio — UI bloccata su file grandi | Cap ~10 update/s |
